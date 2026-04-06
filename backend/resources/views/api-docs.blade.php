@@ -9,18 +9,6 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
-        .code-block {
-            background: #1e293b;
-            border-radius: 6px;
-            padding: 12px;
-            font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 12px;
-            color: #e2e8f0;
-            overflow-x: auto;
-        }
-        .code-block .string { color: #86efac; }
-        .code-block .key { color: #93c5fd; }
-        .code-block .comment { color: #64748b; }
         .method-badge {
             padding: 2px 8px;
             border-radius: 4px;
@@ -44,13 +32,16 @@
             </div>
             <nav class="p-4">
                 <ul class="space-y-2 text-sm">
-                    <li><a href="#auth" class="block py-2 px-3 rounded hover:bg-slate-800">Authentication</a></li>
-                    <li><a href="#therapists" class="block py-2 px-3 rounded hover:bg-slate-800">Therapists</a></li>
-                    <li><a href="#rooms" class="block py-2 px-3 rounded hover:bg-slate-800">Rooms</a></li>
-                    <li><a href="#treatments" class="block py-2 px-3 rounded hover:bg-slate-800">Treatments</a></li>
-                    <li><a href="#products" class="block py-2 px-3 rounded hover:bg-slate-800">Products</a></li>
-                    <li><a href="#bookings" class="block py-2 px-3 rounded hover:bg-slate-800">Bookings</a></li>
-                    <li><a href="#statistics" class="block py-2 px-3 rounded hover:bg-slate-800">Statistics</a></li>
+                    @foreach($routes as $group => $endpoints)
+                        @if(in_array($group, ['auth', 'health']))
+                            @continue
+                        @endif
+                        <li>
+                            <a href="#{{ $group }}" class="block py-2 px-3 rounded hover:bg-slate-800">
+                                {{ ucfirst($group) }}
+                            </a>
+                        </li>
+                    @endforeach
                 </ul>
             </nav>
             <div class="p-4 border-t border-slate-700">
@@ -70,242 +61,40 @@
                     <p class="text-sm text-slate-500 mt-1">{{ $docs['base_url'] }}</p>
                 </div>
 
-                <!-- Auth Section -->
-                <section id="auth" class="mb-8">
-                    <h2 class="text-xl font-bold text-slate-900 mb-4">Authentication</h2>
-                    <div class="bg-slate-50 p-4 rounded-lg mb-4">
-                        <p class="text-sm text-slate-700">Include token in Authorization header:</p>
-                        <div class="code-block mt-2">
-                            Authorization: Bearer {token}
-                        </div>
-                    </div>
+                @foreach($routes as $group => $endpoints)
+                    @if(in_array($group, ['health']))
+                        @continue
+                    @endif
 
-                    <div class="space-y-3">
-                        <div class="border border-slate-200 rounded-lg p-4">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="method-badge method-post">POST</span>
-                                <code class="text-sm">/login</code>
-                            </div>
-                            <div class="code-block">
-                                {<span class="key">"email"</span>: <span class="string">"admin@spa.com"</span>, <span class="key">"password"</span>: <span class="string">"password"</span>}
-                            </div>
-                        </div>
+                    <section id="{{ $group }}" class="mb-8">
+                        @if($group === 'auth')
+                            <h2 class="text-xl font-bold text-slate-900 mb-4">Authentication</h2>
+                        @else
+                            <h2 class="text-xl font-bold text-slate-900 mb-4">{{ ucfirst($group) }}</h2>
+                        @endif
 
-                        <div class="border border-slate-200 rounded-lg p-4">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="method-badge method-post">POST</span>
-                                <code class="text-sm">/register</code>
-                            </div>
-                            <div class="code-block">
-                                {<span class="key">"name"</span>: <span class="string">"John"</span>, <span class="key">"email"</span>: <span class="string">"john@example.com"</span>, <span class="key">"password"</span>: <span class="string">"pass123"</span>}
-                            </div>
+                        <div class="grid grid-cols-1 gap-3">
+                            @foreach($endpoints as $endpoint)
+                                <div class="border border-slate-200 rounded-lg p-4">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <span class="method-badge method-{{ strtolower($endpoint['method']) }}">
+                                            {{ $endpoint['method'] }}
+                                        </span>
+                                        <code class="text-sm">/{{ $endpoint['path'] }}</code>
+                                        @if($endpoint['protected'])
+                                            <span class="ml-auto text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Protected</span>
+                                        @else
+                                            <span class="ml-auto text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Public</span>
+                                        @endif
+                                    </div>
+                                    <p class="text-xs text-slate-600">
+                                        → {{ $endpoint['action'] }}
+                                    </p>
+                                </div>
+                            @endforeach
                         </div>
-
-                        <div class="border border-slate-200 rounded-lg p-4">
-                            <div class="flex items-center gap-2 mb-2">
-                                <span class="method-badge method-get">GET</span>
-                                <code class="text-sm">/me</code>
-                            </div>
-                            <p class="text-xs text-slate-600">Returns current user</p>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Therapists -->
-                <section id="therapists" class="mb-8">
-                    <h2 class="text-xl font-bold text-slate-900 mb-4">Therapists</h2>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-get">GET</span>
-                                <code class="text-xs">/therapists</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-post">POST</span>
-                                <code class="text-xs">/therapists</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-get">GET</span>
-                                <code class="text-xs">/therapists/{id}</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-put">PUT</span>
-                                <code class="text-xs">/therapists/{id}</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-delete">DELETE</span>
-                                <code class="text-xs">/therapists/{id}</code>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Rooms -->
-                <section id="rooms" class="mb-8">
-                    <h2 class="text-xl font-bold text-slate-900 mb-4">Rooms</h2>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-get">GET</span>
-                                <code class="text-xs">/rooms</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-post">POST</span>
-                                <code class="text-xs">/rooms</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-get">GET</span>
-                                <code class="text-xs">/rooms/{id}</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-put">PUT</span>
-                                <code class="text-xs">/rooms/{id}</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-delete">DELETE</span>
-                                <code class="text-xs">/rooms/{id}</code>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Treatments -->
-                <section id="treatments" class="mb-8">
-                    <h2 class="text-xl font-bold text-slate-900 mb-4">Treatments</h2>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-get">GET</span>
-                                <code class="text-xs">/treatments</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-post">POST</span>
-                                <code class="text-xs">/treatments</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-get">GET</span>
-                                <code class="text-xs">/treatments/{id}</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-put">PUT</span>
-                                <code class="text-xs">/treatments/{id}</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-delete">DELETE</span>
-                                <code class="text-xs">/treatments/{id}</code>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Products -->
-                <section id="products" class="mb-8">
-                    <h2 class="text-xl font-bold text-slate-900 mb-4">Products</h2>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-get">GET</span>
-                                <code class="text-xs">/products</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-get">GET</span>
-                                <code class="text-xs">/products/low-stock</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-post">POST</span>
-                                <code class="text-xs">/products</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-put">PUT</span>
-                                <code class="text-xs">/products/{id}</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-delete">DELETE</span>
-                                <code class="text-xs">/products/{id}</code>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Bookings -->
-                <section id="bookings" class="mb-8">
-                    <h2 class="text-xl font-bold text-slate-900 mb-4">Bookings</h2>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-get">GET</span>
-                                <code class="text-xs">/bookings</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-post">POST</span>
-                                <code class="text-xs">/bookings</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-get">GET</span>
-                                <code class="text-xs">/bookings/conflicts/check</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-put">PUT</span>
-                                <code class="text-xs">/bookings/{id}</code>
-                            </div>
-                        </div>
-                        <div class="border border-slate-200 rounded-lg p-3">
-                            <div class="flex items-center gap-2">
-                                <span class="method-badge method-delete">DELETE</span>
-                                <code class="text-xs">/bookings/{id}</code>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Statistics -->
-                <section id="statistics" class="mb-8">
-                    <h2 class="text-xl font-bold text-slate-900 mb-4">Statistics</h2>
-                    <div class="border border-slate-200 rounded-lg p-3">
-                        <div class="flex items-center gap-2">
-                            <span class="method-badge method-get">GET</span>
-                            <code class="text-xs">/statistics</code>
-                        </div>
-                    </div>
-                </section>
+                    </section>
+                @endforeach
 
                 <!-- Status Codes -->
                 <section class="mt-12 pt-8 border-t border-slate-200">
