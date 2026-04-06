@@ -1,12 +1,26 @@
 #!/usr/bin/env sh
 set -eu
 
+# Set default PORT if not provided (Railway sets this automatically)
+export PORT=${PORT:-10000}
+
+echo "=== Starting Application ==="
+echo "PORT: ${PORT}"
+echo "APP_ENV: ${APP_ENV:-local}"
+echo "APP_KEY: ${APP_KEY:+set}"
+
 # Don't copy .env.example - Railway injects environment variables directly
 # If .env doesn't exist, create one with just the APP_KEY from env
 if [ ! -f ".env" ]; then
+  echo "Creating .env file..."
   if [ -n "${APP_KEY:-}" ]; then
     echo "APP_KEY=${APP_KEY}" > .env
+    echo "APP_KEY set in .env"
+  else
+    echo "WARNING: APP_KEY not set!"
   fi
+else
+  echo ".env file exists"
 fi
 
 php artisan config:clear >/dev/null 2>&1 || true
@@ -45,5 +59,10 @@ for i in $(seq 1 10); do
   sleep 1
 done
 
-echo "Starting nginx..."
-nginx -g 'daemon off;'
+# Replace PORT variable in nginx config and start nginx
+echo "Starting nginx on port ${PORT}..."
+envsubst '$PORT' < /etc/nginx/http.d/default.conf > /tmp/nginx.conf
+nginx -g 'daemon off;' -c /dev/stdin 2>&1 <<EOF
+events { worker_connections 1024; }
+http { include /tmp/nginx.conf; }
+EOF
