@@ -61,6 +61,22 @@
                     <p class="text-sm text-slate-500 mt-1">{{ $docs['base_url'] }}</p>
                 </div>
 
+                <!-- Auth Instructions -->
+                @if(isset($routes['auth']))
+                <section id="auth-info" class="mb-8 bg-slate-50 border border-slate-200 rounded-lg p-6">
+                    <h2 class="text-lg font-bold text-slate-900 mb-3">🔐 Authentication</h2>
+                    <p class="text-sm text-slate-700 mb-3">
+                        Protected endpoints require a Bearer token. Include it in the Authorization header:
+                    </p>
+                    <div class="bg-slate-800 text-green-400 p-3 rounded font-mono text-sm">
+                        Authorization: Bearer {your_token}
+                    </div>
+                    <p class="text-xs text-slate-600 mt-3">
+                        💡 Get your token by logging in to <code>/login</code> first
+                    </p>
+                </section>
+                @endif
+
                 @foreach($routes as $group => $endpoints)
                     @if(in_array($group, ['health']))
                         @continue
