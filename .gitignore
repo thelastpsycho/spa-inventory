@@ -1,0 +1,72 @@
+### Laravel (backend)
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+backend/vendor/
+
+# Laravel caches / runtime files
+backend/bootstrap/cache/*
+!backend/bootstrap/cache/.gitignore
+
+backend/storage/*.key
+backend/storage/app/*
+!backend/storage/app/.gitignore
+!backend/storage/app/public/
+!backend/storage/app/public/.gitignore
+
+backend/storage/framework/cache/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/storage/logs/*
+
+# Local dev (Laravel)
+backend/public/storage
+backend/public/hot
+
+### React (frontend)
+frontend/node_modules/
+frontend/dist/
+
+frontend/.env
+frontend/.env.*
+
+### Node / frontend tooling caches (generic)
+**/.cache/
+**/.eslintcache
+**/.stylelintcache
+**/.parcel-cache/
+**/.vite/
+**/.turbo/
+**/.vercel/
+
+### IDE
+.idea/
+.vscode/
+.fleet/
+.zed/
+*.swp
+*.swo
+*~
+
+### OS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+### Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+### Testing
+backend/tests/coverage/
+frontend/coverage/
+
+### PHP tooling / misc
+.env.backup
+.phpunit.result.cache
+.php-cs-fixer.cache
