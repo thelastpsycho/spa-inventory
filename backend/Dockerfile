@@ -34,7 +34,7 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY . /var/www/html
 
 # PHP-FPM configuration
-COPY docker/www.conf /etc/php81/php-fpm.d/www.conf
+COPY docker/www.conf /etc/php84/php-fpm.d/www.conf
 
 # Install dependencies (no dev) at build time
 # (Laravel needs bootstrap/cache present during composer scripts)
