@@ -62,7 +62,13 @@ done
 # Replace PORT variable in nginx config and start nginx
 echo "Starting nginx on port ${PORT}..."
 envsubst '$PORT' < /etc/nginx/http.d/default.conf > /tmp/nginx.conf
-nginx -g 'daemon off;' -c /dev/stdin 2>&1 <<EOF
+
+# Create complete nginx config with events section
+cat > /tmp/nginx-full.conf <<EOF
 events { worker_connections 1024; }
-http { include /tmp/nginx.conf; }
+http {
+    include /tmp/nginx.conf;
+}
 EOF
+
+nginx -g 'daemon off;' -c /tmp/nginx-full.conf
