@@ -1,15 +1,6 @@
 #!/usr/bin/env sh
 set -eu
 
-export PORT="${PORT:-10000}"
-
-# Configure nginx with the correct port using sed
-sed "s/\${PORT}/${PORT}/g" /etc/nginx/http.d/default.conf.template > /etc/nginx/http.d/default.conf
-
-# Verify nginx config was created
-echo "Nginx configuration created:"
-cat /etc/nginx/http.d/default.conf
-
 # Don't copy .env.example - Railway injects environment variables directly
 # If .env doesn't exist, create one with just the APP_KEY from env
 if [ ! -f ".env" ]; then
@@ -55,11 +46,4 @@ for i in $(seq 1 10); do
 done
 
 echo "Starting nginx..."
-# Test nginx configuration
-nginx -t
-if [ $? -ne 0 ]; then
-  echo "ERROR: nginx configuration failed"
-  cat /etc/nginx/http.d/default.conf
-  exit 1
-fi
 nginx -g 'daemon off;'

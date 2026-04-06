@@ -41,7 +41,7 @@ RUN mkdir -p storage bootstrap/cache \
   && composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
 
 # Nginx + startup
-COPY docker/nginx.conf.template /etc/nginx/http.d/default.conf.template
+COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/start.sh /start.sh
 RUN chmod +x /start.sh
 
