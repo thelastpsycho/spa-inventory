@@ -46,4 +46,9 @@ for i in $(seq 1 10); do
 done
 
 echo "Starting nginx..."
+
+# Test PHP-FPM connection
+echo "Testing PHP-FPM..."
+SCRIPT_NAME=/test.php SCRIPT_FILENAME=/var/www/html/public/test.php REQUEST_METHOD=GET cgi-fcgi -bind -connect 127.0.0.1:9000 2>&1 || echo "PHP-FPM test failed"
+
 nginx -g 'daemon off;'
