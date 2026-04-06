@@ -3,7 +3,9 @@ set -eu
 
 export PORT="${PORT:-10000}"
 
-envsubst '${PORT}' < /etc/nginx/http.d/default.conf.template > /etc/nginx/http.d/default.conf
+# Replace PORT in nginx config using sed instead of envsubst
+sed -i "s/\${PORT}/${PORT}/g" /etc/nginx/http.d/default.conf.template
+mv /etc/nginx/http.d/default.conf.template /etc/nginx/http.d/default.conf
 
 if [ ! -f ".env" ] && [ -f ".env.example" ]; then
   cp .env.example .env
@@ -33,4 +35,3 @@ fi
 
 php-fpm -D
 nginx -g 'daemon off;'
-
