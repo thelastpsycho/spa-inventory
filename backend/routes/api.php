@@ -40,4 +40,4 @@ Route::middleware('auth:sanctum')->group(function () {
     // Statistics
     Route::get('/statistics', [StatisticsController::class, 'index']);
 });
-Route::get('/api/health', function () { return response()->json(['status' => 'ok', 'timestamp' => now()]); });
+Route::get('/health', function () { return response()->json(['status' => 'ok', 'timestamp' => now()]); });

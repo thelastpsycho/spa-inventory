@@ -39,7 +39,8 @@ COPY docker/www.conf /etc/php84/php-fpm.d/www.conf
 
 # Install dependencies (no dev) at build time
 # (Laravel needs bootstrap/cache present during composer scripts)
-RUN mkdir -p storage bootstrap/cache \
+RUN mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views \
+  && mkdir -p bootstrap/cache \
   && chown -R www-data:www-data /var/www/html \
   && chmod -R ug+rwX storage bootstrap/cache \
   && composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
