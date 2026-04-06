@@ -6,8 +6,12 @@ export PORT="${PORT:-10000}"
 # Configure nginx with the correct port using sed
 sed -i "s/\${PORT}/${PORT}/g" /etc/nginx/http.d/default.conf.template
 
-if [ ! -f ".env" ] && [ -f ".env.example" ]; then
-  cp .env.example .env
+# Don't copy .env.example - Railway injects environment variables directly
+# If .env doesn't exist, create one with just the APP_KEY from env
+if [ ! -f ".env" ]; then
+  if [ -n "${APP_KEY:-}" ]; then
+    echo "APP_KEY=${APP_KEY}" > .env
+  fi
 fi
 
 php artisan config:clear >/dev/null 2>&1 || true
