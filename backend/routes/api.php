@@ -41,3 +41,4 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/statistics', [StatisticsController::class, 'index']);
 });
 Route::get('/health', function () { return response()->json(['status' => 'ok', 'timestamp' => now()]); });
+Route::get('/docs', [App\Http\Controllers\ApiDocumentationController::class, 'index']);
