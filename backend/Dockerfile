@@ -15,6 +15,7 @@ RUN apk add --no-cache \
     git \
     unzip \
     netcat-openbsd \
+    gettext \
   && docker-php-ext-install -j"$(nproc)" \
     bcmath \
     intl \
