@@ -4,7 +4,7 @@ set -eu
 export PORT="${PORT:-10000}"
 
 # Configure nginx with the correct port using sed
-sed -i "s/\${PORT}/${PORT}/g" /etc/nginx/http.d/default.conf.template
+sed "s/\${PORT}/${PORT}/g" /etc/nginx/http.d/default.conf.template > /etc/nginx/http.d/default.conf
 
 # Don't copy .env.example - Railway injects environment variables directly
 # If .env doesn't exist, create one with just the APP_KEY from env
