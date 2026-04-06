@@ -14,6 +14,7 @@ RUN apk add --no-cache \
     sqlite-dev \
     git \
     unzip \
+    netcat-openbsd \
   && docker-php-ext-install -j"$(nproc)" \
     bcmath \
     intl \

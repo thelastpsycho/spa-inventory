@@ -38,4 +38,17 @@ fi
 
 # Start PHP-FPM and nginx
 php-fpm -D
+
+# Wait for PHP-FPM to be ready
+echo "Waiting for PHP-FPM to start..."
+for i in $(seq 1 10); do
+  if nc -z 127.0.0.1 9000 2>/dev/null; then
+    echo "PHP-FPM is ready!"
+    break
+  fi
+  echo "Waiting... ($i/10)"
+  sleep 1
+done
+
+echo "Starting nginx..."
 nginx -g 'daemon off;'
