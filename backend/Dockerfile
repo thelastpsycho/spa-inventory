@@ -33,10 +33,11 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 COPY . /var/www/html
 
 # Install dependencies (no dev) at build time
-RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader \
-  && mkdir -p storage bootstrap/cache \
+# (Laravel needs bootstrap/cache present during composer scripts)
+RUN mkdir -p storage bootstrap/cache \
   && chown -R www-data:www-data /var/www/html \
-  && chmod -R ug+rwX storage bootstrap/cache
+  && chmod -R ug+rwX storage bootstrap/cache \
+  && composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader
 
 # Nginx + startup
 COPY docker/nginx.conf.template /etc/nginx/http.d/default.conf.template
