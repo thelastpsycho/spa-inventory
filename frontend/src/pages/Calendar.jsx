@@ -483,9 +483,18 @@ const Calendar = () => {
                 }
                 .fc-daygrid-day-number {
                   font-weight: 600;
-                  color: #000000;
+                  color: #000000 !important;
                   font-size: 0.875rem;
                   padding: 0.5rem;
+                }
+                .fc-daygrid-day {
+                  background-color: #ffffff;
+                }
+                .fc-daygrid-day-body {
+                  background-color: #ffffff;
+                }
+                .fc-daygrid-day-frame {
+                  background-color: #ffffff;
                 }
                 .fc-timegrid-slot-label {
                   font-size: 0.75rem;
@@ -517,7 +526,10 @@ const Calendar = () => {
                   display: none;
                 }
                 .fc-daygrid-day.fc-day-today {
-                  background-color: #f5f5f7;
+                  background-color: #f5f5f7 !important;
+                }
+                .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+                  color: #000000 !important;
                 }
                 .fc-resource-area {
                   width: 140px;
@@ -528,6 +540,7 @@ const Calendar = () => {
                 .fc-datagrid-cell {
                   padding: 8px 12px;
                   border-right: 1px solid rgba(0, 0, 0, 0.06);
+                  background-color: #ffffff;
                 }
                 .fc-datagrid-cell-main {
                   font-size: 0.875rem;
@@ -539,12 +552,17 @@ const Calendar = () => {
                 }
                 .fc-timegrid-slot-lane {
                   height: 60px;
+                  background-color: #ffffff;
                 }
                 .fc-scrollgrid-shrink {
                   width: 50px;
                 }
                 .fc-timegrid-axis {
                   width: 50px;
+                }
+                .fc-daygrid-more-link {
+                  color: #007AFF !important;
+                  font-weight: 500;
                 }
               `}
             </style>
