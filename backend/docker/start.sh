@@ -15,6 +15,22 @@ php artisan view:clear >/dev/null 2>&1 || true
 
 php artisan storage:link >/dev/null 2>&1 || true
 
+# Optional: run migrations on deploy (Railway-friendly when no shell is available)
+if [ "${RUN_MIGRATIONS:-false}" = "true" ] || [ "${RUN_MIGRATIONS:-false}" = "1" ]; then
+  php artisan migrate --force
+fi
+
+# Optional: run seeders on deploy
+# - set RUN_SEEDERS=true to run the default DatabaseSeeder
+# - set SEEDER_CLASS=YourSeederClass to run a specific seeder
+if [ "${RUN_SEEDERS:-false}" = "true" ] || [ "${RUN_SEEDERS:-false}" = "1" ]; then
+  if [ -n "${SEEDER_CLASS:-}" ]; then
+    php artisan db:seed --force --class="${SEEDER_CLASS}"
+  else
+    php artisan db:seed --force
+  fi
+fi
+
 php-fpm -D
 nginx -g 'daemon off;'
 
