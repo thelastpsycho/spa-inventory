@@ -17,10 +17,14 @@ server {
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         fastcgi_param DOCUMENT_ROOT $document_root;
         fastcgi_pass 127.0.0.1:9000;
+        fastcgi_read_timeout 300;
     }
 
     location ~* \.(?:css|js|jpg|jpeg|gif|png|svg|ico|webp|ttf|otf|woff|woff2)$ {
         expires 7d;
         access_log off;
     }
+
+    error_log /dev/stderr info;
+    access_log /dev/stderr;
 }
