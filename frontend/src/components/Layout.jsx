@@ -59,11 +59,11 @@ const Layout = () => {
   }, [])
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gray-50">
       {/* Mobile Overlay */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black/20 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/10 z-40 lg:hidden backdrop-blur-sm"
           onClick={() => setMobileMenuOpen(false)}
         ></div>
       )}
@@ -71,47 +71,47 @@ const Layout = () => {
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 h-full bg-white border-r border-gray-200 z-50
-          transition-all duration-200 ease-in-out
-          ${isSidebarOpen ? 'w-64' : 'w-16'}
+          fixed top-0 left-0 h-full bg-white z-50
+          transition-all duration-300 ease-in-out
+          ${isSidebarOpen ? 'w-72' : 'w-20'}
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
         `}
       >
         {/* Logo Section */}
-        <div className="h-14 flex items-center justify-between px-4 border-b border-gray-200">
+        <div className="h-20 flex items-center justify-between px-6">
           {isSidebarOpen && (
-            <Link to="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded bg-brand-900 flex items-center justify-center">
-                <span className="text-white text-sm font-semibold">S</span>
+            <Link to="/" className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center">
+                <span className="text-white text-base font-semibold">S</span>
               </div>
-              <span className="font-semibold text-brand-900 text-sm">Spa Admin</span>
+              <span className="font-semibold text-gray-900 text-base">Spa Admin</span>
             </Link>
           )}
           {!isSidebarOpen && (
             <Link to="/" className="mx-auto">
-              <div className="w-8 h-8 rounded bg-brand-900 flex items-center justify-center">
-                <span className="text-white text-sm font-semibold">S</span>
+              <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center">
+                <span className="text-white text-base font-semibold">S</span>
               </div>
             </Link>
           )}
           <button
             onClick={() => setSidebarOpen(!isSidebarOpen)}
-            className="hidden lg:flex p-1.5 rounded hover:bg-gray-100 transition-colors"
+            className="hidden lg:flex p-2 rounded-xl hover:bg-gray-100 transition-colors"
           >
             <svg
-              className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isSidebarOpen ? 'rotate-180' : ''}`}
+              className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${isSidebarOpen ? 'rotate-180' : ''}`}
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         </div>
 
         {/* Navigation */}
-        <nav className="p-3 space-y-1 overflow-y-auto h-[calc(100vh-140px)]">
+        <nav className="px-4 space-y-0.5 overflow-y-auto h-[calc(100vh-180px)]">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path
             return (
@@ -119,18 +119,15 @@ const Layout = () => {
                 key={item.path}
                 to={item.path}
                 className={`
-                  relative flex items-center px-3 py-2 rounded-lg text-sm transition-all duration-150
+                  relative flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
                   ${isActive
-                    ? 'text-gray-900 font-medium'
-                    : 'text-gray-600 hover:bg-gray-50'
+                    ? 'bg-gray-900 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
                   }
-                  ${!isSidebarOpen ? 'justify-center' : ''}
+                  ${!isSidebarOpen ? 'justify-center px-3' : ''}
                 `}
               >
-                {isActive && (
-                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-brand-900 rounded-r-full"></div>
-                )}
-                <span className={isActive ? 'text-brand-900' : 'text-gray-400'}>
+                <span className="flex-shrink-0">
                   {item.icon}
                 </span>
                 {isSidebarOpen && (
@@ -144,40 +141,40 @@ const Layout = () => {
         </nav>
 
         {/* User Section */}
-        <div className="absolute bottom-0 left-0 right-0 p-3 border-t border-gray-200">
+        <div className="absolute bottom-0 left-0 right-0 p-4">
           {isSidebarOpen ? (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2 min-w-0">
-                <div className="w-8 h-8 rounded-full bg-brand-900 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
+            <div className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
                   {user?.name?.charAt(0) || 'U'}
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">
                     {user?.name}
                   </p>
-                  <p className="text-xs text-gray-500 truncate">
+                  <p className="text-xs text-gray-500">
                     Admin
                   </p>
                 </div>
               </div>
               <button
                 onClick={handleLogout}
-                className="p-1.5 rounded hover:bg-gray-100 text-gray-500 transition-colors"
+                className="p-2 rounded-lg hover:bg-gray-200 text-gray-500 transition-colors"
                 title="Logout"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
               </button>
             </div>
           ) : (
             <button
               onClick={handleLogout}
-              className="w-full p-1.5 rounded hover:bg-gray-100 text-gray-500 transition-colors"
+              className="w-full p-3 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors"
               title="Logout"
             >
-              <svg className="w-4 h-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              <svg className="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
             </button>
           )}
@@ -185,23 +182,23 @@ const Layout = () => {
       </aside>
 
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 z-30">
-        <div className="flex items-center justify-between h-full px-4">
+      <header className="lg:hidden fixed top-0 left-0 right-0 h-20 bg-white z-30">
+        <div className="flex items-center justify-between h-full px-6">
           <button
             onClick={() => setMobileMenuOpen(!isMobileMenuOpen)}
-            className="p-2 rounded hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
           >
-            <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <div className="flex items-center space-x-2">
-            <div className="w-7 h-7 rounded bg-brand-900 flex items-center justify-center">
-              <span className="text-white text-xs font-semibold">S</span>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gray-900 flex items-center justify-center">
+              <span className="text-white text-sm font-semibold">S</span>
             </div>
-            <span className="font-semibold text-brand-900 text-sm">Spa Admin</span>
+            <span className="font-semibold text-gray-900">Spa Admin</span>
           </div>
-          <div className="w-8 h-8 rounded-full bg-brand-900 flex items-center justify-center text-white text-xs font-semibold">
+          <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white text-sm font-semibold">
             {user?.name?.charAt(0) || 'U'}
           </div>
         </div>
@@ -210,12 +207,12 @@ const Layout = () => {
       {/* Main Content */}
       <main
         className={`
-          transition-all duration-200 ease-in-out
-          ${isSidebarOpen ? 'lg:ml-64' : 'lg:ml-16'}
-          pt-14 lg:pt-0
+          transition-all duration-300 ease-in-out
+          ${isSidebarOpen ? 'lg:ml-72' : 'lg:ml-20'}
+          pt-20 lg:pt-0
         `}
       >
-        <div className="p-6 lg:p-8">
+        <div className="p-6 lg:p-10">
           <Outlet />
         </div>
       </main>

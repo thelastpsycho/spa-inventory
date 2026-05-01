@@ -28,8 +28,10 @@ class StatisticsController extends Controller
 
         // Basic counts
         $totalBookings = Booking::whereBetween('start_time', [$startDate, $endDate])->count();
-        $definiteBookings = Booking::whereBetween('start_time', [$startDate, $endDate])
-            ->where('status', 'definite')->count();
+        $confirmedBookings = Booking::whereBetween('start_time', [$startDate, $endDate])
+            ->where('status', 'confirmed')->count();
+        $completedBookings = Booking::whereBetween('start_time', [$startDate, $endDate])
+            ->where('status', 'completed')->count();
         $tentativeBookings = Booking::whereBetween('start_time', [$startDate, $endDate])
             ->where('status', 'tentative')->count();
         $waitingListBookings = Booking::whereBetween('start_time', [$startDate, $endDate])
@@ -49,9 +51,9 @@ class StatisticsController extends Controller
         $totalTreatments = Treatment::count();
         $activeTreatments = Treatment::where('is_active', true)->count();
 
-        // Revenue calculation (only definite and tentative bookings count for revenue)
+        // Revenue calculation (confirmed and completed bookings count for revenue)
         $bookingsWithRevenue = Booking::whereBetween('start_time', [$startDate, $endDate])
-            ->whereIn('status', ['definite', 'tentative'])
+            ->whereIn('status', ['confirmed', 'completed'])
             ->with('treatment')
             ->get();
 
@@ -59,26 +61,28 @@ class StatisticsController extends Controller
             return $booking->treatment?->price ?? 0;
         });
 
-        // Treatment hours calculation
+        // Treatment hours calculation (using treatment duration)
         $totalTreatmentHours = $bookingsWithRevenue->sum(function ($booking) {
-            return $booking->duration ?? 0;
+            return $booking->treatment?->duration ?? 0;
         }) / 60; // Convert minutes to hours
 
         // Average booking value
-        $confirmedBookingsCount = $definiteBookings + $tentativeBookings;
-        $averageBookingValue = $confirmedBookingsCount > 0
-            ? $totalRevenue / $confirmedBookingsCount
+        $activeBookingsCount = $confirmedBookings + $completedBookings;
+        $averageBookingValue = $activeBookingsCount > 0
+            ? $totalRevenue / $activeBookingsCount
             : 0;
 
         // Therapist performance
         $therapistStats = Therapist::with(['bookings' => function ($query) use ($startDate, $endDate) {
             $query->whereBetween('start_time', [$startDate, $endDate])
-                ->whereIn('status', ['definite', 'tentative']);
+                ->whereIn('status', ['confirmed', 'completed']);
         }, 'bookings.treatment'])
         ->get()
         ->map(function ($therapist) {
             $bookings = $therapist->bookings;
-            $totalHours = $bookings->sum('duration') / 60;
+            $totalHours = $bookings->sum(function ($booking) {
+                return $booking->treatment?->duration ?? 0;
+            }) / 60;
             $revenue = $bookings->sum(function ($booking) {
                 return $booking->treatment?->price ?? 0;
             });
@@ -99,12 +103,14 @@ class StatisticsController extends Controller
         // Room utilization
         $roomStats = Room::with(['bookings' => function ($query) use ($startDate, $endDate) {
             $query->whereBetween('start_time', [$startDate, $endDate])
-                ->whereIn('status', ['definite', 'tentative']);
+                ->whereIn('status', ['confirmed', 'completed']);
         }])
         ->get()
         ->map(function ($room) {
             $bookings = $room->bookings;
-            $totalHours = $bookings->sum('duration') / 60;
+            $totalHours = $bookings->sum(function ($booking) {
+                return $booking->treatment?->duration ?? 0;
+            }) / 60;
 
             return [
                 'id' => $room->id,
@@ -121,23 +127,24 @@ class StatisticsController extends Controller
         // Treatment popularity
         $treatmentStats = Treatment::with(['bookings' => function ($query) use ($startDate, $endDate) {
             $query->whereBetween('start_time', [$startDate, $endDate])
-                ->whereIn('status', ['definite', 'tentative']);
+                ->whereIn('status', ['confirmed', 'completed']);
         }])
         ->get()
         ->map(function ($treatment) {
             $bookings = $treatment->bookings;
-            $revenue = $bookings->count() * $treatment->price;
+            $bookingCount = $bookings->count();
+            $revenue = $bookingCount * $treatment->price;
 
             return [
                 'id' => $treatment->id,
                 'name' => $treatment->name,
                 'duration' => $treatment->duration,
                 'price' => round($treatment->price, 2),
-                'total_bookings' => $bookings->count(),
+                'booking_count' => $bookingCount,
                 'total_revenue' => round($revenue, 2),
                 'revenue_percentage' => 0, // Will calculate after total
             ];
-        })->sortByDesc('total_bookings')->values();
+        })->sortByDesc('booking_count')->values();
 
         // Calculate revenue percentage for treatments
         $totalTreatmentRevenue = $treatmentStats->sum('total_revenue');
@@ -147,6 +154,17 @@ class StatisticsController extends Controller
                 : 0;
             return $treatment;
         });
+
+        // Get most popular treatment
+        $mostPopularTreatment = $treatmentStats->first();
+        $mostPopularTreatmentData = null;
+        if ($mostPopularTreatment && $mostPopularTreatment['booking_count'] > 0) {
+            $mostPopularTreatmentData = [
+                'name' => $mostPopularTreatment['name'],
+                'count' => $mostPopularTreatment['booking_count'],
+                'revenue' => $mostPopularTreatment['total_revenue'],
+            ];
+        }
 
         // Inventory stats
         $totalProducts = Product::count();
@@ -171,14 +189,16 @@ class StatisticsController extends Controller
             ],
             'overview' => [
                 'total_bookings' => $totalBookings,
-                'definite_bookings' => $definiteBookings,
+                'confirmed_bookings' => $confirmedBookings,
+                'completed_bookings' => $completedBookings,
                 'tentative_bookings' => $tentativeBookings,
                 'waiting_list_bookings' => $waitingListBookings,
                 'cancelled_bookings' => $cancelledBookings,
                 'total_revenue' => round($totalRevenue, 2),
-                'total_treatment_hours' => round($totalTreatmentHours, 2),
+                'total_treatment_hours' => round($totalTreatmentHours * 60, 2), // Convert back to minutes for display
                 'average_booking_value' => round($averageBookingValue, 2),
                 'occupancy_rate' => $occupancyRate,
+                'most_popular_treatment' => $mostPopularTreatmentData,
             ],
             'resources' => [
                 'total_therapists' => $totalTherapists,

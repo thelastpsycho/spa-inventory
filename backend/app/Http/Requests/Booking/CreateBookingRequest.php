@@ -24,6 +24,7 @@ class CreateBookingRequest extends FormRequest
             'end_time' => ['nullable', 'date', 'after:start_time'],
             'duration' => ['nullable', 'integer', 'min:1'],
             'notes' => ['nullable', 'string'],
+            'status' => ['nullable', 'in:confirmed,cancelled,completed,tentative,waiting_list'],
             'products' => ['array'],
             'products.*.product_id' => ['required', 'exists:products,id'],
             'products.*.quantity' => ['required', 'integer', 'min:1'],

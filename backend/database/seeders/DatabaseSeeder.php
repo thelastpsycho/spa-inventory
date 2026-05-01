@@ -49,5 +49,8 @@ class DatabaseSeeder extends Seeder
 
             $this->command->info('Created: 7 therapists, 5 rooms, 300 bookings');
         }
+
+        // Call MTD Statistics Seeder
+        $this->call(MTDStatisticsSeeder::class);
     }
 }

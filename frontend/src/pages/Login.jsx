@@ -16,10 +16,17 @@ const Login = () => {
     setError('')
     setLoading(true)
 
+    console.log('🔐 Login attempt:', { email, timestamp: new Date().toISOString() })
+
     try {
+      console.log('📤 Calling login function with:', email)
       await login(email, password)
+      console.log('✅ Login successful, navigating to dashboard')
       navigate('/')
     } catch (err) {
+      console.error('❌ Login failed:', err)
+      console.error('❌ Error response:', err.response)
+      console.error('❌ Error message:', err.response?.data?.message || err.message)
       setError(err.response?.data?.message || 'Login failed')
     } finally {
       setLoading(false)

@@ -15,14 +15,47 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+
+  // Log outgoing requests
+  console.log('🚀 API Request:', {
+    method: config.method?.toUpperCase(),
+    url: config.baseURL + config.url,
+    headers: config.headers,
+    data: config.data,
+    params: config.params,
+    timestamp: new Date().toISOString()
+  })
+
   return config
 })
 
 // Handle auth errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Log successful responses
+    console.log('✅ API Response:', {
+      status: response.status,
+      url: response.config.url,
+      data: response.data,
+      timestamp: new Date().toISOString()
+    })
+    return response
+  },
   (error) => {
+    // Log errors
+    console.error('❌ API Error:', {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      url: error.config?.url,
+      method: error.config?.method?.toUpperCase(),
+      requestData: error.config?.data,
+      responseData: error.response?.data,
+      timestamp: new Date().toISOString()
+    })
+
     if (error.response?.status === 401) {
+      console.log('🔒 Unauthorized - redirecting to login')
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       window.location.href = '/login'

@@ -36,14 +36,31 @@ export const AuthProvider = ({ children }) => {
   }, [])
 
   const login = async (email, password) => {
-    const response = await authAPI.login({ email, password })
-    const { user, token } = response.data
+    console.log('🔑 AuthContext: Starting login process')
+    console.log('📧 Email:', email)
+    console.log('🔒 Password length:', password?.length)
 
-    localStorage.setItem('token', token)
-    localStorage.setItem('user', JSON.stringify(user))
-    setUser(user)
+    try {
+      const response = await authAPI.login({ email, password })
+      console.log('📡 API Response received:', response.status)
+      console.log('📦 Response data:', response.data)
 
-    return user
+      const { user, token } = response.data
+      console.log('👤 User:', user)
+      console.log('🎫 Token:', token?.substring(0, 20) + '...')
+
+      localStorage.setItem('token', token)
+      localStorage.setItem('user', JSON.stringify(user))
+      setUser(user)
+
+      console.log('✅ Login process completed successfully')
+      return user
+    } catch (error) {
+      console.error('💥 AuthContext: Login error:', error)
+      console.error('💥 Error config:', error.config)
+      console.error('💥 Error response:', error.response)
+      throw error
+    }
   }
 
   const register = async (name, email, password, passwordConfirmation) => {

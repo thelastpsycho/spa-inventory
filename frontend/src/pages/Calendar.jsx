@@ -12,7 +12,8 @@ import SearchableDropdown from '../components/SearchableDropdown'
 // Helper functions for status colors
 const getStatusColor = (status) => {
   switch (status) {
-    case 'definite': return '#22c55e' // green
+    case 'confirmed': return '#22c55e' // green
+    case 'completed': return '#16a34a' // dark green
     case 'tentative': return '#f59e0b' // yellow
     case 'waiting_list': return '#3b82f6' // blue
     case 'cancelled': return '#ef4444' // red
@@ -22,7 +23,8 @@ const getStatusColor = (status) => {
 
 const getStatusBorderColor = (status) => {
   switch (status) {
-    case 'definite': return '#16a34a' // dark green
+    case 'confirmed': return '#16a34a' // dark green
+    case 'completed': return '#15803d' // darker green
     case 'tentative': return '#d97706' // dark yellow
     case 'waiting_list': return '#2563eb' // dark blue
     case 'cancelled': return '#dc2626' // dark red
@@ -43,9 +45,63 @@ const Calendar = () => {
   const [showCancelledBookings, setShowCancelledBookings] = useState(false) // New filter state
   const [cancelledCount, setCancelledCount] = useState(0) // Track cancelled bookings count
 
+  // Popover state
+  const [popover, setPopover] = useState({
+    isOpen: false,
+    x: 0,
+    y: 0,
+    booking: null,
+    dateInfo: null
+  })
+
   // Alert and Confirm Dialog states
   const [alert, setAlert] = useState(null)
   const [confirmDialog, setConfirmDialog] = useState(null)
+
+  const closePopover = () => {
+    setPopover({ isOpen: false, x: 0, y: 0, booking: null, dateInfo: null })
+  }
+
+  const handlePopoverAction = (action) => {
+    closePopover()
+    if (action === 'create' && popover.dateInfo) {
+      // Open create modal with the selected date/time
+      const { start, end } = popover.dateInfo
+      const startDate = new Date(start)
+      setSelectedBooking({
+        start: startDate.toISOString().split('T')[0], // Date portion
+        startTime: startDate.toTimeString().substring(0, 5), // Time portion
+        // Add empty extended props to avoid undefined errors
+        guestName: '',
+        guestEmail: '',
+        guestPhone: '',
+        treatment: null,
+        therapist: null,
+        room: null,
+        notes: '',
+        status: 'tentative',
+        duration: ''
+      })
+      setShowModal(true)
+    } else if (action === 'edit' && popover.booking) {
+      // Open edit modal
+      setSelectedBooking(popover.booking)
+      setShowModal(true)
+    }
+  }
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (popover.isOpen) {
+        closePopover()
+      }
+    }
+
+    document.addEventListener('click', handleClickOutside)
+    return () => {
+      document.removeEventListener('click', handleClickOutside)
+    }
+  }, [popover.isOpen])
 
   useEffect(() => {
     fetchResources()
@@ -77,26 +133,34 @@ const Calendar = () => {
       const response = await bookingAPI.getAll({
         include_cancelled: showCancelledBookings ? 'true' : 'false'
       })
-      const events = response.data.map((booking) => ({
-        id: booking.id,
-        resourceId: booking.room_id.toString(),
-        title: `${booking.guest_name} - ${booking.treatment.name}`,
-        start: booking.start_time.replace('.000000Z', 'Z'),
-        end: booking.end_time.replace('.000000Z', 'Z'),
-        backgroundColor: getStatusColor(booking.status),
-        borderColor: getStatusBorderColor(booking.status),
-        extendedProps: {
-          guestName: booking.guest_name,
-          guestEmail: booking.guest_email,
-          guestPhone: booking.guest_phone,
-          treatment: booking.treatment,
-          therapist: booking.therapist,
-          room: booking.room,
-          notes: booking.notes,
-          status: booking.status,
-          duration: booking.duration,
-        },
-      }))
+      const events = response.data.map((booking) => {
+        const startDate = new Date(booking.start_time)
+        return {
+          id: booking.id,
+          resourceId: booking.room_id.toString(),
+          title: `${booking.guest_name} | ${booking.treatment.name} | ${booking.therapist.name}`,
+          start: booking.start_time.replace('.000000Z', 'Z'),
+          end: booking.end_time.replace('.000000Z', 'Z'),
+          backgroundColor: '#f9fafb',
+          borderColor: '#e5e7eb',
+          textColor: '#374151',
+          className: `event-${booking.status}`,
+          extendedProps: {
+            ...booking,
+            start: startDate.toISOString().split('T')[0],
+            startTime: startDate.toTimeString().substring(0, 5),
+            guestName: booking.guest_name,
+            guestEmail: booking.guest_email,
+            guestPhone: booking.guest_phone,
+            treatment: booking.treatment,
+            therapist: booking.therapist,
+            room: booking.room,
+            notes: booking.notes,
+            status: booking.status,
+            duration: booking.duration,
+          },
+        }
+      })
       setBookings(events)
 
       // If we're not showing cancelled, fetch the count separately
@@ -116,24 +180,37 @@ const Calendar = () => {
     }
   }
 
-  const handleDateSelect = async (selectInfo) => {
-    setShowModal(true)
-    const startDate = new Date(selectInfo.startStr)
-    setSelectedBooking({
-      start: startDate.toISOString().split('T')[0], // Date portion
-      startTime: startDate.toTimeString().substring(0, 5), // Time portion
+  const handleDateSelect = async (info) => {
+    // Get click position
+    const clickX = info.jsEvent?.clientX || window.innerWidth / 2
+    const clickY = info.jsEvent?.clientY || window.innerHeight / 2
+
+    // Show popover for create action at click position
+    setPopover({
+      isOpen: true,
+      x: clickX,
+      y: clickY,
+      booking: null,
+      dateInfo: {
+        start: new Date(info.start),
+        end: new Date(info.end)
+      }
     })
   }
 
   const handleEventClick = (clickInfo) => {
-    const startDate = new Date(clickInfo.event.startStr)
-    setSelectedBooking({
-      id: clickInfo.event.id,
-      ...clickInfo.event.extendedProps,
-      start: startDate.toISOString().split('T')[0], // Date portion
-      startTime: startDate.toTimeString().substring(0, 5), // Time portion
+    clickInfo.jsEvent.preventDefault()
+    clickInfo.jsEvent.stopPropagation()
+
+    // Get click position
+    const rect = clickInfo.jsEvent.target.getBoundingClientRect()
+    setPopover({
+      isOpen: true,
+      x: rect.left + rect.width / 2,
+      y: rect.top,
+      booking: clickInfo.event.extendedProps,
+      dateInfo: null
     })
-    setShowModal(true)
   }
 
   const handleEventDrop = async (dropInfo) => {
@@ -380,7 +457,7 @@ const Calendar = () => {
       </div>
 
       {/* Calendar Navigation */}
-      <div className="bg-white border border-gray-100 rounded-lg px-6 py-4">
+      <div className="bg-white border border-gray-100 rounded-lg px-6 py-4 sticky top-0 z-40 shadow-sm">
         <div className="flex items-center justify-between">
           {/* Navigation */}
           <div className="flex items-center space-x-1">
@@ -502,19 +579,62 @@ const Calendar = () => {
                   font-weight: 400;
                 }
                 .fc-event {
-                  border: none;
-                  border-radius: 6px;
-                  padding: 3px 8px;
-                  font-size: 0.8125rem;
-                  font-weight: 500;
-                  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+                  border: 1px solid #e5e7eb;
+                  border-radius: 4px;
+                  padding: 2px 6px;
+                  font-size: 0.7rem;
+                  font-weight: 400;
                   cursor: pointer;
-                  transition: all 0.15s ease-in-out;
-                  color: #ffffff;
+                  background-color: #f9fafb !important;
+                  color: #374151 !important;
                 }
                 .fc-event:hover {
-                  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3);
-                  transform: translateY(-1px);
+                  background-color: #f3f4f6 !important;
+                  border-color: #d1d5db;
+                }
+                .fc-event-title,
+                .fc-event-time {
+                  color: inherit !important;
+                  font-weight: 400;
+                  font-size: 0.7rem;
+                }
+                /* Status-based color coding */
+                .fc-event.event-confirmed {
+                  background-color: #dcfce7 !important;
+                  border-color: #86efac !important;
+                  color: #166534 !important;
+                }
+                .fc-event.event-completed {
+                  background-color: #bbf7d0 !important;
+                  border-color: #4ade80 !important;
+                  color: #14532d !important;
+                }
+                .fc-event.event-tentative {
+                  background-color: #fef3c7 !important;
+                  border-color: #fcd34d !important;
+                  color: #92400e !important;
+                }
+                .fc-event.event-waiting_list {
+                  background-color: #dbeafe !important;
+                  border-color: #60a5fa !important;
+                  color: #1e40af !important;
+                }
+                .fc-event.event-cancelled {
+                  background-color: #fee2e2 !important;
+                  border-color: #fca5a5 !important;
+                  color: #991b1b !important;
+                  text-decoration: line-through;
+                  opacity: 0.7;
+                }
+                .fc-daygrid-event {
+                  background-color: #f9fafb !important;
+                  border: 1px solid #e5e7eb !important;
+                  color: #374151 !important;
+                }
+                .fc-timegrid-event {
+                  background-color: #f9fafb !important;
+                  border: 1px solid #e5e7eb !important;
+                  color: #374151 !important;
                 }
                 .fc-toolbar-title {
                   font-weight: 600;
@@ -536,6 +656,21 @@ const Calendar = () => {
                 }
                 .fc-resource-area-col {
                   width: 140px;
+                }
+                .fc-resource-area {
+                  position: sticky !important;
+                  top: 0 !important;
+                  z-index: 50 !important;
+                }
+                .fc-resource {
+                  position: sticky !important;
+                  top: 0 !important;
+                  z-index: 50 !important;
+                }
+                .fc-resource-area-header {
+                  position: sticky !important;
+                  top: 0 !important;
+                  z-index: 50 !important;
                 }
                 .fc-datagrid-cell {
                   padding: 8px 12px;
@@ -564,6 +699,24 @@ const Calendar = () => {
                   color: #007AFF !important;
                   font-weight: 500;
                 }
+                /* Month view event styling */
+                .fc-daygrid-event {
+                  font-size: 0.65rem;
+                  line-height: 1.1;
+                  padding: 1px 2px;
+                }
+                .fc-daygrid-event .fc-event-title {
+                  font-size: 0.65rem;
+                  font-weight: 300;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                  white-space: nowrap;
+                }
+                .fc-daygrid-event .fc-event-time {
+                  font-size: 0.6rem;
+                  font-weight: 300;
+                  opacity: 0.8;
+                }
               `}
             </style>
             <FullCalendar
@@ -590,6 +743,35 @@ const Calendar = () => {
               eventClick={handleEventClick}
               eventDrop={handleEventDrop}
               eventResize={handleEventResize}
+              dateClick={(info) => {
+                // Handle clicks on time slots in day/week views
+                handleDateSelect({
+                  start: info.date,
+                  end: info.date,
+                  startStr: info.date.toISOString(),
+                  endStr: info.date.toISOString(),
+                  jsEvent: info.jsEvent,
+                  view: info.view
+                })
+              }}
+              eventMouseEnter={(info) => {
+                const booking = info.event.extendedProps
+                const startTime = new Date(info.event.start)
+                const endTime = new Date(info.event.end)
+
+                info.el.setAttribute('title',
+                  `Guest: ${booking.guestName}\n` +
+                  `Email: ${booking.guestEmail || 'N/A'}\n` +
+                  `Phone: ${booking.guestPhone || 'N/A'}\n` +
+                  `Treatment: ${booking.treatment?.name || 'N/A'}\n` +
+                  `Therapist: ${booking.therapist?.name || 'N/A'}\n` +
+                  `Room: ${booking.room?.name || 'N/A'}\n` +
+                  `Time: ${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n` +
+                  `Duration: ${booking.treatment?.duration || 0} minutes\n` +
+                  `Status: ${booking.status}\n` +
+                  `Notes: ${booking.notes || 'No notes'}`
+                )
+              }}
               viewDidMount={(info) => {
                 setCurrentView(info.view.type)
                 setCurrentDateRange({
@@ -612,6 +794,43 @@ const Calendar = () => {
           </div>
         )}
       </div>
+
+      {/* Popover for Create/Edit */}
+      {popover.isOpen && (
+        <div
+          className="fixed z-50"
+          style={{
+            left: `${popover.x}px`,
+            top: `${popover.y - 10}px`,
+            transform: 'translate(-50%, 0)'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-32">
+            {popover.booking ? (
+              <button
+                onClick={() => handlePopoverAction('edit')}
+                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center"
+              >
+                <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit Booking
+              </button>
+            ) : (
+              <button
+                onClick={() => handlePopoverAction('create')}
+                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center"
+              >
+                <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                New Booking
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <BookingModal
@@ -759,28 +978,25 @@ const BookingModal = ({ booking, treatments, therapists, rooms, setAlert, onClos
 
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="border-b border-gray-200 px-8 py-6">
-          <h2 className="text-xl font-semibold text-gray-900 tracking-tight">
+        <div className="border-b border-gray-200 px-4 py-3">
+          <h2 className="text-base font-semibold text-gray-900">
             {booking?.id ? 'Edit Booking' : 'New Booking'}
           </h2>
-          <p className="text-sm text-gray-500 mt-1 font-normal">
-            {booking?.id ? 'Update booking details' : 'Create a new appointment'}
-          </p>
         </div>
 
         {/* Content */}
-        <div className="p-8 overflow-y-auto flex-1">
+        <div className="p-4 overflow-y-auto flex-1">
           {conflicts.length > 0 && (
-            <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-lg">
+            <div className="mb-4 bg-red-50 border border-red-200 p-3 rounded-lg">
               <div className="flex items-start">
-                <svg className="w-5 h-5 text-red-600 mr-3 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-red-600 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <div className="flex-1">
-                  <p className="font-medium text-red-900 text-sm">Scheduling conflicts detected:</p>
-                  <ul className="list-disc list-inside mt-2 text-sm text-red-700 space-y-1">
+                  <p className="font-medium text-red-900 text-xs">Scheduling conflicts detected:</p>
+                  <ul className="list-disc list-inside mt-1 text-xs text-red-700 space-y-1">
                     {conflicts.map((conflict) => (
                       <li key={conflict.id}>
                         {conflict.guest_name} - {conflict.treatment.name}
@@ -792,19 +1008,19 @@ const BookingModal = ({ booking, treatments, therapists, rooms, setAlert, onClos
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {/* Guest Information */}
             <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-4 tracking-tight">Guest Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <h3 className="text-xs font-semibold text-gray-900 mb-2">Guest Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
                     Guest Name
                   </label>
                   <input
                     type="text"
                     required
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-150"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Enter guest name"
                     value={formData.guest_name}
                     onChange={(e) => setFormData({ ...formData, guest_name: e.target.value })}
@@ -900,7 +1116,8 @@ const BookingModal = ({ booking, treatments, therapists, rooms, setAlert, onClos
                     required
                   >
                     <option value="tentative">⏸️ Tentative</option>
-                    <option value="definite">✅ Definite</option>
+                    <option value="confirmed">✅ Confirmed</option>
+                    <option value="completed">✓ Completed</option>
                     <option value="waiting_list">📋 Waiting List</option>
                     <option value="cancelled">❌ Cancelled</option>
                   </select>
