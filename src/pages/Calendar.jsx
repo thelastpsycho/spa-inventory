@@ -1,836 +1,459 @@
-import { useState, useEffect } from 'react'
-import FullCalendar from '@fullcalendar/react'
-import dayGridPlugin from '@fullcalendar/daygrid'
-import timeGridPlugin from '@fullcalendar/timegrid'
-import resourceTimeGridPlugin from '@fullcalendar/resource-timegrid'
-import interactionPlugin from '@fullcalendar/interaction'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { bookingAPI, treatmentAPI, therapistAPI, roomAPI } from '../services/api'
 import Alert from '../components/Alert'
 import ConfirmDialog from '../components/ConfirmDialog'
 import SearchableDropdown from '../components/SearchableDropdown'
+import TimeGrid from '../components/calendar/TimeGrid'
+import MonthGrid from '../components/calendar/MonthGrid'
+import BookingPanel from '../components/calendar/BookingPanel'
+import {
+  STATUS, STATUS_ORDER, addDays, addMonths, startOfWeek, sameDay, ymd, hhmm, minToHHMM,
+  getRange, formatTitle, normalizeBooking,
+} from '../components/calendar/calendarUtils'
 
-// Helper functions for status colors
-const getStatusColor = (status) => {
-  switch (status) {
-    case 'confirmed': return '#22c55e' // green
-    case 'completed': return '#16a34a' // dark green
-    case 'tentative': return '#f59e0b' // yellow
-    case 'waiting_list': return '#3b82f6' // blue
-    case 'cancelled': return '#ef4444' // red
-    default: return '#007AFF'
-  }
-}
+const VIEWS = [
+  { id: 'day', label: 'Day' },
+  { id: 'week', label: 'Week' },
+  { id: 'month', label: 'Month' },
+]
 
-const getStatusBorderColor = (status) => {
-  switch (status) {
-    case 'confirmed': return '#16a34a' // dark green
-    case 'completed': return '#15803d' // darker green
-    case 'tentative': return '#d97706' // dark yellow
-    case 'waiting_list': return '#2563eb' // dark blue
-    case 'cancelled': return '#dc2626' // dark red
-    default: return '#0051D5'
-  }
-}
+const fmtMove = (d) =>
+  d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+
+// Shape the BookingModal expects (local date/time — not UTC)
+const toModalBooking = (b) => ({
+  ...b.raw,
+  start: ymd(b.start),
+  startTime: hhmm(b.start),
+  guestName: b.raw.guest_name,
+  guestEmail: b.raw.guest_email,
+  guestPhone: b.raw.guest_phone,
+  treatment: b.treatment,
+  therapist: b.therapist,
+  room: b.room,
+  notes: b.raw.notes,
+  status: b.status,
+  duration: b.raw.duration,
+})
 
 const Calendar = () => {
+  const [view, setView] = useState('day')
+  const [date, setDate] = useState(() => new Date())
+  const [now, setNow] = useState(() => new Date())
   const [bookings, setBookings] = useState([])
   const [treatments, setTreatments] = useState([])
   const [therapists, setTherapists] = useState([])
   const [rooms, setRooms] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [hidden, setHidden] = useState({ cancelled: true })
+  const [therapistFilter, setTherapistFilter] = useState('')
+  const [roomFilter, setRoomFilter] = useState('')
+  const [selectedId, setSelectedId] = useState(null)
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [showModal, setShowModal] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [currentView, setCurrentView] = useState('resourceTimeGridDay')
-  const [currentDateRange, setCurrentDateRange] = useState(null)
-  const [showCancelledBookings, setShowCancelledBookings] = useState(false) // New filter state
-  const [cancelledCount, setCancelledCount] = useState(0) // Track cancelled bookings count
-
-  // Popover state
-  const [popover, setPopover] = useState({
-    isOpen: false,
-    x: 0,
-    y: 0,
-    booking: null,
-    dateInfo: null
-  })
-
-  // Alert and Confirm Dialog states
   const [alert, setAlert] = useState(null)
   const [confirmDialog, setConfirmDialog] = useState(null)
 
-  const closePopover = () => {
-    setPopover({ isOpen: false, x: 0, y: 0, booking: null, dateInfo: null })
-  }
+  const range = useMemo(() => getRange(view, date), [view, date])
+  const rangeKey = `${ymd(range.start)}_${ymd(range.end)}`
 
-  const handlePopoverAction = (action) => {
-    closePopover()
-    if (action === 'create' && popover.dateInfo) {
-      // Open create modal with the selected date/time
-      const { start, end } = popover.dateInfo
-      const startDate = new Date(start)
-      setSelectedBooking({
-        start: startDate.toISOString().split('T')[0], // Date portion
-        startTime: startDate.toTimeString().substring(0, 5), // Time portion
-        // Add empty extended props to avoid undefined errors
-        guestName: '',
-        guestEmail: '',
-        guestPhone: '',
-        treatment: null,
-        therapist: null,
-        room: null,
-        notes: '',
-        status: 'tentative',
-        duration: ''
-      })
-      setShowModal(true)
-    } else if (action === 'edit' && popover.booking) {
-      // Open edit modal
-      setSelectedBooking(popover.booking)
-      setShowModal(true)
-    }
-  }
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (popover.isOpen) {
-        closePopover()
-      }
-    }
-
-    document.addEventListener('click', handleClickOutside)
-    return () => {
-      document.removeEventListener('click', handleClickOutside)
-    }
-  }, [popover.isOpen])
-
-  useEffect(() => {
-    fetchResources()
-    fetchBookings()
+  const showAlert = useCallback((type, message, ms = type === 'error' ? 5000 : 3000) => {
+    setAlert({ type, message })
+    setTimeout(() => setAlert(null), ms)
   }, [])
 
-  // Fetch bookings again when filter changes
+  // Tick the "now" line every minute
   useEffect(() => {
-    fetchBookings()
-  }, [showCancelledBookings])
+    const t = setInterval(() => setNow(new Date()), 60000)
+    return () => clearInterval(t)
+  }, [])
 
-  const fetchResources = async () => {
-    try {
-      const [treatmentsRes, therapistsRes, roomsRes] = await Promise.all([
-        treatmentAPI.getAll(),
-        therapistAPI.getAll(),
-        roomAPI.getAll(),
-      ])
-      setTreatments(treatmentsRes.data)
-      setTherapists(therapistsRes.data)
-      setRooms(roomsRes.data)
-    } catch (error) {
-      console.error('Error fetching resources:', error)
-    }
-  }
-
-  const fetchBookings = async () => {
-    try {
-      const response = await bookingAPI.getAll({
-        include_cancelled: showCancelledBookings ? 'true' : 'false'
-      })
-      const events = response.data.map((booking) => {
-        const startDate = new Date(booking.start_time)
-        return {
-          id: booking.id,
-          resourceId: booking.room_id.toString(),
-          title: `${booking.guest_name} | ${booking.treatment.name} | ${booking.therapist.name}`,
-          start: booking.start_time.replace('.000000Z', 'Z'),
-          end: booking.end_time.replace('.000000Z', 'Z'),
-          backgroundColor: '#f9fafb',
-          borderColor: '#e5e7eb',
-          textColor: '#374151',
-          className: `event-${booking.status}`,
-          extendedProps: {
-            ...booking,
-            start: startDate.toISOString().split('T')[0],
-            startTime: startDate.toTimeString().substring(0, 5),
-            guestName: booking.guest_name,
-            guestEmail: booking.guest_email,
-            guestPhone: booking.guest_phone,
-            treatment: booking.treatment,
-            therapist: booking.therapist,
-            room: booking.room,
-            notes: booking.notes,
-            status: booking.status,
-            duration: booking.duration,
-          },
-        }
-      })
-      setBookings(events)
-
-      // If we're not showing cancelled, fetch the count separately
-      if (!showCancelledBookings) {
-        const cancelledResponse = await bookingAPI.getAll({
-          include_cancelled: 'true'
-        })
-        const cancelledCount = cancelledResponse.data.filter(b => b.status === 'cancelled').length
-        setCancelledCount(cancelledCount)
-      } else {
-        setCancelledCount(0)
+  useEffect(() => {
+    const fetchResources = async () => {
+      try {
+        const [treatmentsRes, therapistsRes, roomsRes] = await Promise.all([
+          treatmentAPI.getAll(),
+          therapistAPI.getAll(),
+          roomAPI.getAll(),
+        ])
+        setTreatments(treatmentsRes.data)
+        setTherapists(therapistsRes.data)
+        setRooms(roomsRes.data)
+      } catch (error) {
+        console.error('Error fetching resources:', error)
       }
+    }
+    fetchResources()
+  }, [])
+
+  const fetchBookings = useCallback(async () => {
+    try {
+      // One query for the visible range, cancelled included; status chips filter client-side
+      const response = await bookingAPI.getAll({
+        include_cancelled: 'true',
+        start: range.start.toISOString(),
+        end: new Date(range.end.getTime() - 1).toISOString(),
+      })
+      setBookings(response.data.map(normalizeBooking))
     } catch (error) {
       console.error('Error fetching bookings:', error)
+      showAlert('error', 'Failed to load bookings: ' + (error.response?.data?.message || error.message))
     } finally {
       setLoading(false)
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeKey, showAlert])
 
-  const handleDateSelect = async (info) => {
-    // Get click position
-    const clickX = info.jsEvent?.clientX || window.innerWidth / 2
-    const clickY = info.jsEvent?.clientY || window.innerHeight / 2
+  useEffect(() => { fetchBookings() }, [fetchBookings])
 
-    // Show popover for create action at click position
-    setPopover({
-      isOpen: true,
-      x: clickX,
-      y: clickY,
-      booking: null,
-      dateInfo: {
-        start: new Date(info.start),
-        end: new Date(info.end)
+  // ---------- derived data ----------
+  const scoped = useMemo(() => bookings.filter((b) =>
+    (!therapistFilter || String(b.therapistId) === String(therapistFilter)) &&
+    (view === 'day' || !roomFilter || String(b.roomId) === String(roomFilter))
+  ), [bookings, therapistFilter, roomFilter, view])
+
+  const visible = useMemo(() => scoped.filter((b) => !hidden[b.status]), [scoped, hidden])
+
+  const counts = useMemo(() => {
+    const c = {}
+    STATUS_ORDER.forEach((k) => { c[k] = 0 })
+    scoped.forEach((b) => {
+      if (view === 'month' && b.start.getMonth() !== date.getMonth()) return
+      c[b.status] = (c[b.status] || 0) + 1
+    })
+    return c
+  }, [scoped, view, date])
+
+  const activeCount = STATUS_ORDER.filter((k) => k !== 'cancelled').reduce((n, k) => n + counts[k], 0)
+  const totalLabel = view === 'day'
+    ? `${activeCount} bookings ${sameDay(date, now) ? 'today' : 'this day'}`
+    : view === 'week'
+      ? `${activeCount} bookings this week`
+      : `${activeCount} bookings in ${date.toLocaleDateString('en-GB', { month: 'long' })}`
+
+  const selected = bookings.find((b) => b.id === selectedId) || null
+
+  const dayColumns = useMemo(() => rooms.map((r) => {
+    const n = bookings.filter((b) => String(b.roomId) === String(r.id) && b.status !== 'cancelled').length
+    return {
+      key: String(r.id),
+      roomId: r.id,
+      label: r.name,
+      sublabel: `${n} ${n === 1 ? 'booking' : 'bookings'}`,
+      date,
+      isToday: sameDay(date, now),
+    }
+  }), [rooms, bookings, date, now])
+
+  const weekColumns = useMemo(() => {
+    const s = startOfWeek(date)
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = addDays(s, i)
+      const isToday = sameDay(d, now)
+      const n = scoped.filter((b) => sameDay(b.start, d) && b.status !== 'cancelled').length
+      return {
+        key: ymd(d),
+        date: d,
+        isToday,
+        onHeaderClick: () => { setDate(d); setView('day') },
+        render: () => (
+          <>
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {d.toLocaleDateString('en-GB', { weekday: 'short' })}
+            </span>
+            <span className={`w-7 h-7 rounded-full inline-flex items-center justify-center text-sm font-semibold ${isToday ? 'bg-gray-900 text-white' : 'text-gray-900'}`}>
+              {d.getDate()}
+            </span>
+            <span className="ml-auto text-xs text-gray-500">{n}</span>
+          </>
+        ),
       }
     })
+  }, [date, now, scoped])
+
+  const bookingsByCol = useMemo(() => {
+    const map = {}
+    visible.forEach((b) => {
+      const key = view === 'day' ? String(b.roomId) : ymd(b.start)
+      ;(map[key] = map[key] || []).push(b)
+    })
+    return map
+  }, [visible, view])
+
+  const upNext = useMemo(() => {
+    if (view !== 'day' || !sameDay(date, now)) return []
+    return visible
+      .filter((b) => b.start > now && b.status !== 'cancelled' && b.id !== selectedId)
+      .sort((a, b) => a.start - b.start)
+      .slice(0, 4)
+  }, [visible, view, date, now, selectedId])
+
+  // ---------- navigation ----------
+  const navigate = (dir) => {
+    if (view === 'day') setDate((d) => addDays(d, dir))
+    else if (view === 'week') setDate((d) => addDays(d, 7 * dir))
+    else setDate((d) => addMonths(d, dir))
+  }
+  const goToday = () => setDate(new Date())
+  const openDay = (d) => { setDate(d); setView('day') }
+
+  // ---------- create / edit ----------
+  const openCreate = (day, minutes, room = null) => {
+    setSelectedBooking({
+      start: ymd(day),
+      startTime: minToHHMM(minutes),
+      guestName: '',
+      guestEmail: '',
+      guestPhone: '',
+      treatment: null,
+      therapist: null,
+      room,
+      notes: '',
+      status: 'tentative',
+      duration: '',
+    })
+    setShowModal(true)
   }
 
-  const handleEventClick = (clickInfo) => {
-    clickInfo.jsEvent.preventDefault()
-    clickInfo.jsEvent.stopPropagation()
+  const handleSlotClick = (col, minutes) => {
+    const room = col.roomId != null ? rooms.find((r) => r.id === col.roomId) || null : null
+    openCreate(col.date, minutes, room)
+  }
 
-    // Get click position
-    const rect = clickInfo.jsEvent.target.getBoundingClientRect()
-    setPopover({
+  const openEdit = (b) => {
+    setSelectedBooking(toModalBooking(b))
+    setShowModal(true)
+  }
+
+  // ---------- updates ----------
+  const confirmUpdate = ({ title, message, confirmText, data, booking, success }) => {
+    setConfirmDialog({
       isOpen: true,
-      x: rect.left + rect.width / 2,
-      y: rect.top,
-      booking: clickInfo.event.extendedProps,
-      dateInfo: null
-    })
-  }
-
-  const handleEventDrop = async (dropInfo) => {
-    const startDate = new Date(dropInfo.event.start)
-    const endDate = new Date(dropInfo.event.end)
-
-    const formattedStart = startDate.toLocaleString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    })
-
-    const formattedEnd = endDate.toLocaleString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    })
-
-    // Show confirm dialog
-    return new Promise((resolve) => {
-      setConfirmDialog({
-        isOpen: true,
-        title: 'Move Booking',
-        message: `Move booking to ${formattedStart} - ${formattedEnd}? This will change the booking time.`,
-        confirmText: 'Move Booking',
-        cancelText: 'Cancel',
-        onConfirm: async () => {
-          setConfirmDialog(null)
-
-          try {
-            // Calculate duration in minutes
-            const duration = Math.round((endDate - startDate) / 60000)
-
-            await bookingAPI.update(dropInfo.event.id, {
-              start_time: dropInfo.event.start.toISOString(),
-              duration: parseInt(duration, 10),
-            })
-
-            // Show success message
-            setAlert({
-              type: 'success',
-              message: `Booking successfully moved to ${formattedStart}`
-            })
-
-            setTimeout(() => setAlert(null), 3000)
-
-            fetchBookings()
-            resolve(true)
-          } catch (error) {
-            const errorMsg = 'Failed to update booking: ' + (error.response?.data?.message || error.message)
-            setAlert({
-              type: 'error',
-              message: errorMsg
-            })
-            setTimeout(() => setAlert(null), 5000)
-            dropInfo.revert()
-            resolve(false)
-          }
-        },
-        onCancel: () => {
-          setConfirmDialog(null)
-          dropInfo.revert()
-          resolve(false)
+      title,
+      message,
+      confirmText,
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        setConfirmDialog(null)
+        try {
+          await bookingAPI.update(booking.id, data)
+          showAlert('success', success)
+          fetchBookings()
+        } catch (error) {
+          showAlert('error', 'Failed to update booking: ' + (error.response?.data?.message || error.message))
         }
-      })
+      },
+      onCancel: () => setConfirmDialog(null),
     })
   }
 
-  const handleEventResize = async (resizeInfo) => {
-    const startDate = new Date(resizeInfo.event.start)
-    const endDate = new Date(resizeInfo.event.end)
-
-    const duration = Math.round((endDate - startDate) / 60000)
-
-    const formattedEnd = endDate.toLocaleString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    })
-
-    // Show confirm dialog
-    return new Promise((resolve) => {
-      setConfirmDialog({
-        isOpen: true,
-        title: 'Extend Booking',
-        message: `Extend booking to ${formattedEnd}? This will change the booking duration to ${duration} minutes.`,
-        confirmText: 'Extend Booking',
-        cancelText: 'Cancel',
-        onConfirm: async () => {
-          setConfirmDialog(null)
-
-          try {
-            await bookingAPI.update(resizeInfo.event.id, {
-              duration: parseInt(duration, 10),
-            })
-
-            // Show success message
-            setAlert({
-              type: 'success',
-              message: `Booking duration successfully updated to ${duration} minutes`
-            })
-
-            setTimeout(() => setAlert(null), 3000)
-
-            fetchBookings()
-            resolve(true)
-          } catch (error) {
-            const errorMsg = 'Failed to update booking: ' + (error.response?.data?.message || error.message)
-            setAlert({
-              type: 'error',
-              message: errorMsg
-            })
-            setTimeout(() => setAlert(null), 5000)
-            resizeInfo.revert()
-            resolve(false)
-          }
-        },
-        onCancel: () => {
-          setConfirmDialog(null)
-          resizeInfo.revert()
-          resolve(false)
-        }
-      })
+  const handleMove = (b, { start, roomId }) => {
+    const end = new Date(start.getTime() + b.duration * 60000)
+    const roomChanged = String(roomId) !== String(b.roomId)
+    const newRoom = rooms.find((r) => String(r.id) === String(roomId))
+    const data = { start_time: start.toISOString(), duration: b.duration }
+    if (roomChanged) data.room_id = roomId
+    confirmUpdate({
+      booking: b,
+      title: 'Move Booking',
+      message: `Move ${b.guest} to ${fmtMove(start)} – ${hhmm(end)}${roomChanged && newRoom ? ` in ${newRoom.name}` : ''}?`,
+      confirmText: 'Move Booking',
+      data,
+      success: `Booking moved to ${fmtMove(start)}${roomChanged && newRoom ? ` · ${newRoom.name}` : ''}`,
     })
   }
 
-  const goToToday = () => {
-    const calendarApi = window.calendar?.getApi()
-    if (calendarApi) {
-      calendarApi.today()
+  const handleResize = (b, minutes) => {
+    const end = new Date(b.start.getTime() + minutes * 60000)
+    confirmUpdate({
+      booking: b,
+      title: 'Change Duration',
+      message: `Change ${b.guest}'s booking to end at ${hhmm(end)}? The duration becomes ${minutes} minutes.`,
+      confirmText: 'Update Duration',
+      data: { start_time: b.start.toISOString(), duration: minutes },
+      success: `Booking duration updated to ${minutes} minutes`,
+    })
+  }
+
+  const handleMoveToDay = (b, start) => handleMove(b, { start, roomId: b.roomId })
+
+  const handleComplete = async (b) => {
+    try {
+      await bookingAPI.update(b.id, { status: 'completed' })
+      showAlert('success', `${b.guest} marked as completed`)
+      fetchBookings()
+    } catch (error) {
+      showAlert('error', 'Failed to update booking: ' + (error.response?.data?.message || error.message))
     }
   }
 
-  const navigateDate = (direction) => {
-    const calendarApi = window.calendar?.getApi()
-    if (calendarApi) {
-      if (direction === 'prev') {
-        calendarApi.prev()
-      } else {
-        calendarApi.next()
-      }
-    }
-  }
+  const handleCancelBooking = (b) => confirmUpdate({
+    booking: b,
+    title: 'Cancel Booking',
+    message: `Cancel ${b.guest}'s booking on ${fmtMove(b.start)}? The time slot will be freed.`,
+    confirmText: 'Cancel Booking',
+    data: { status: 'cancelled' },
+    success: 'Booking cancelled',
+  })
 
-  const changeView = (view) => {
-    const calendarApi = window.calendar?.getApi()
-    if (calendarApi) {
-      calendarApi.changeView(view)
-      setCurrentView(view)
-    }
-  }
+  const toggleStatus = (k) => setHidden((h) => ({ ...h, [k]: !h[k] }))
 
-  const formatDateRange = () => {
-    if (!currentDateRange) return ''
-
-    const { start, end } = currentDateRange
-
-    const options = { month: 'long', year: 'numeric' }
-    if (currentView === 'resourceTimeGridDay') {
-      return start.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-    } else if (currentView === 'timeGridWeek') {
-      const weekStart = new Date(start)
-      const weekEnd = new Date(end)
-      weekEnd.setDate(weekEnd.getDate() - 1)
-      return `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-    } else {
-      return start.toLocaleDateString('en-US', options)
-    }
-  }
+  // ---------- render ----------
+  const segBtn = (active) =>
+    `px-4 py-2 text-sm rounded-md transition-colors ${active ? 'bg-white text-gray-900 font-semibold shadow-sm' : 'text-gray-600 font-medium hover:text-gray-900'}`
+  const iconBtn = 'w-10 h-10 border border-gray-200 bg-white rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-50'
+  const showPanel = view === 'day' || selected
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="bg-white border border-gray-100 rounded-lg p-8">
-        <div className="flex items-center justify-between mb-4">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Booking Calendar</h1>
-            <p className="text-sm text-gray-500 font-normal">Manage spa appointments and schedules</p>
+      <header className="bg-white border border-gray-100 rounded-xl px-6 py-5 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-col gap-0.5">
+            <h1 className="text-[22px] font-semibold text-gray-900 tracking-tight">Booking Calendar</h1>
+            <p className="text-sm text-gray-500">{formatTitle(view, date)}</p>
           </div>
-          <div className="hidden md:flex items-center space-x-8">
-            <div className="text-right">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Bookings</p>
-              <p className="text-2xl font-semibold text-gray-900 mt-0.5">{bookings.length}</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => navigate(-1)} aria-label={`Previous ${view}`} className={iconBtn}>
+                <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+              </button>
+              <button type="button" onClick={goToday} className="h-10 px-4 border border-gray-200 bg-white rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">
+                Today
+              </button>
+              <button type="button" onClick={() => navigate(1)} aria-label={`Next ${view}`} className={iconBtn}>
+                <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+              </button>
             </div>
-            <div className="w-px h-8 bg-gray-200"></div>
-            <div className="text-right">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Rooms</p>
-              <p className="text-2xl font-semibold text-gray-900 mt-0.5">{rooms.length}</p>
+            <div role="tablist" aria-label="Calendar view" className="flex bg-gray-100 rounded-lg p-1 gap-0.5">
+              {VIEWS.map((v) => (
+                <button key={v.id} type="button" role="tab" aria-selected={view === v.id} onClick={() => setView(v.id)} className={segBtn(view === v.id)}>
+                  {v.label}
+                </button>
+              ))}
             </div>
+            <button
+              type="button"
+              onClick={() => openCreate(date, Math.max(9 * 60, Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30) % (24 * 60))}
+              className="h-11 px-[18px] rounded-lg bg-gray-900 text-white text-sm font-semibold flex items-center gap-2 hover:bg-gray-800"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              New booking
+            </button>
           </div>
         </div>
 
-        {/* Booking Filter */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-          <div className="flex items-center space-x-3">
-            <span className="text-sm font-medium text-gray-700">Show Bookings:</span>
-            <div className="inline-flex items-center bg-gray-100 rounded-lg p-1" role="group">
-              <button
-                onClick={() => setShowCancelledBookings(false)}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
-                  !showCancelledBookings
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-                aria-pressed={!showCancelledBookings}
-                type="button"
-              >
-                Active
-              </button>
-              <button
-                onClick={() => setShowCancelledBookings(true)}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-200 relative ${
-                  showCancelledBookings
-                    ? 'bg-white text-gray-900 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-                aria-pressed={showCancelledBookings}
-                type="button"
-              >
-                All Bookings
-                {!showCancelledBookings && cancelledCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-white">
-                    {cancelledCount}
-                  </span>
-                )}
-              </button>
-            </div>
+        {/* Status chips = legend + filter */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-gray-100">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] text-gray-500 mr-1">{totalLabel}</span>
+            {STATUS_ORDER.map((k) => {
+              const s = STATUS[k]
+              const on = !hidden[k]
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => toggleStatus(k)}
+                  className={`h-9 px-3 rounded-full flex items-center gap-2 text-[13px] font-medium ${
+                    on ? 'bg-white text-gray-900 border border-gray-200' : 'bg-gray-50 text-gray-500 border border-dashed border-gray-300 line-through'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ background: on ? s.dot : '#d1d5db' }} />
+                  {s.label}
+                  <span className="font-semibold">{counts[k]}</span>
+                </button>
+              )
+            })}
           </div>
-
-          {/* Filter Status */}
-          <div className="text-sm text-gray-500">
-            {showCancelledBookings
-              ? `${bookings.length} total bookings`
-              : `${bookings.length} active bookings`
-            }
-            {!showCancelledBookings && cancelledCount > 0 && (
-              <span className="ml-2 text-orange-600">(+{cancelledCount} cancelled)</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-[13px] text-gray-700">
+              Therapist
+              <select
+                value={therapistFilter}
+                onChange={(e) => setTherapistFilter(e.target.value)}
+                className="h-9 border border-gray-200 rounded-lg px-2.5 text-[13px] text-gray-900 bg-white"
+              >
+                <option value="">All therapists</option>
+                {therapists.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </label>
+            {view !== 'day' && (
+              <label className="flex items-center gap-2 text-[13px] text-gray-700">
+                Room
+                <select
+                  value={roomFilter}
+                  onChange={(e) => setRoomFilter(e.target.value)}
+                  className="h-9 border border-gray-200 rounded-lg px-2.5 text-[13px] text-gray-900 bg-white"
+                >
+                  <option value="">All rooms</option>
+                  {rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </label>
             )}
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Calendar Navigation */}
-      <div className="bg-white border border-gray-100 rounded-lg px-6 py-4 sticky top-0 z-40 shadow-sm">
-        <div className="flex items-center justify-between">
-          {/* Navigation */}
-          <div className="flex items-center space-x-1">
-            <button
-              onClick={() => navigateDate('prev')}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-150"
-              title="Previous"
-            >
-              <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <button
-              onClick={goToToday}
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-150"
-            >
-              Today
-            </button>
-            <button
-              onClick={() => navigateDate('next')}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-150"
-              title="Next"
-            >
-              <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Date Range Display */}
-          <div className="text-center">
-            <h2 className="text-lg font-semibold text-gray-900">
-              {formatDateRange()}
-            </h2>
-          </div>
-
-          {/* View Switcher */}
-          <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => changeView('dayGridMonth')}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-150 ${
-                currentView === 'dayGridMonth'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Month
-            </button>
-            <button
-              onClick={() => changeView('timeGridWeek')}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-150 ${
-                currentView === 'timeGridWeek'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Week
-            </button>
-            <button
-              onClick={() => changeView('resourceTimeGridDay')}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all duration-150 ${
-                currentView === 'resourceTimeGridDay'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Day
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Calendar */}
-      <div className="bg-white border border-gray-100 rounded-lg overflow-hidden">
-        {loading ? (
-          <div className="flex justify-center items-center h-96">
-            <div className="animate-spin rounded-full h-10 w-10 border-2 border-gray-100 border-t-gray-900"></div>
-          </div>
-        ) : (
-          <div>
-            <style>
-              {`
-                .fc {
-                  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
-                }
-                .fc-theme-standard td,
-                .fc-theme-standard th {
-                  border-color: rgba(0, 0, 0, 0.06);
-                }
-                .fc-theme-standard .fc-scrollgrid {
-                  border-color: rgba(0, 0, 0, 0.06);
-                }
-                .fc-col-header-cell-cushion {
-                  font-weight: 600;
-                  font-size: 0.75rem;
-                  text-transform: uppercase;
-                  letter-spacing: 0.05em;
-                  color: #8e8e93;
-                  padding: 1rem 0.5rem;
-                }
-                .fc-daygrid-day-number {
-                  font-weight: 600;
-                  color: #000000 !important;
-                  font-size: 0.875rem;
-                  padding: 0.5rem;
-                }
-                .fc-daygrid-day {
-                  background-color: #ffffff;
-                }
-                .fc-daygrid-day-body {
-                  background-color: #ffffff;
-                }
-                .fc-daygrid-day-frame {
-                  background-color: #ffffff;
-                }
-                .fc-timegrid-slot-label {
-                  font-size: 0.75rem;
-                  color: #8e8e93;
-                  font-weight: 400;
-                }
-                .fc-event {
-                  border: 1px solid #e5e7eb;
-                  border-radius: 4px;
-                  padding: 2px 6px;
-                  font-size: 0.7rem;
-                  font-weight: 400;
-                  cursor: pointer;
-                  background-color: #f9fafb !important;
-                  color: #374151 !important;
-                }
-                .fc-event:hover {
-                  background-color: #f3f4f6 !important;
-                  border-color: #d1d5db;
-                }
-                .fc-event-title,
-                .fc-event-time {
-                  color: inherit !important;
-                  font-weight: 400;
-                  font-size: 0.7rem;
-                }
-                /* Status-based color coding */
-                .fc-event.event-confirmed {
-                  background-color: #dcfce7 !important;
-                  border-color: #86efac !important;
-                  color: #166534 !important;
-                }
-                .fc-event.event-completed {
-                  background-color: #bbf7d0 !important;
-                  border-color: #4ade80 !important;
-                  color: #14532d !important;
-                }
-                .fc-event.event-tentative {
-                  background-color: #fef3c7 !important;
-                  border-color: #fcd34d !important;
-                  color: #92400e !important;
-                }
-                .fc-event.event-waiting_list {
-                  background-color: #dbeafe !important;
-                  border-color: #60a5fa !important;
-                  color: #1e40af !important;
-                }
-                .fc-event.event-cancelled {
-                  background-color: #fee2e2 !important;
-                  border-color: #fca5a5 !important;
-                  color: #991b1b !important;
-                  text-decoration: line-through;
-                  opacity: 0.7;
-                }
-                .fc-daygrid-event {
-                  background-color: #f9fafb !important;
-                  border: 1px solid #e5e7eb !important;
-                  color: #374151 !important;
-                }
-                .fc-timegrid-event {
-                  background-color: #f9fafb !important;
-                  border: 1px solid #e5e7eb !important;
-                  color: #374151 !important;
-                }
-                .fc-toolbar-title {
-                  font-weight: 600;
-                  font-size: 1rem;
-                  color: #000000;
-                  letter-spacing: -0.01em;
-                }
-                .fc-button {
-                  display: none;
-                }
-                .fc-daygrid-day.fc-day-today {
-                  background-color: #f5f5f7 !important;
-                }
-                .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
-                  color: #000000 !important;
-                }
-                .fc-resource-area {
-                  width: 140px;
-                }
-                .fc-resource-area-col {
-                  width: 140px;
-                }
-                .fc-resource-area {
-                  position: sticky !important;
-                  top: 0 !important;
-                  z-index: 50 !important;
-                }
-                .fc-resource {
-                  position: sticky !important;
-                  top: 0 !important;
-                  z-index: 50 !important;
-                }
-                .fc-resource-area-header {
-                  position: sticky !important;
-                  top: 0 !important;
-                  z-index: 50 !important;
-                }
-                .fc-datagrid-cell {
-                  padding: 8px 12px;
-                  border-right: 1px solid rgba(0, 0, 0, 0.06);
-                  background-color: #ffffff;
-                }
-                .fc-datagrid-cell-main {
-                  font-size: 0.875rem;
-                  font-weight: 600;
-                  color: #000000;
-                }
-                .fc-timegrid-slot {
-                  height: 60px;
-                }
-                .fc-timegrid-slot-lane {
-                  height: 60px;
-                  background-color: #ffffff;
-                }
-                .fc-scrollgrid-shrink {
-                  width: 50px;
-                }
-                .fc-timegrid-axis {
-                  width: 50px;
-                }
-                .fc-daygrid-more-link {
-                  color: #007AFF !important;
-                  font-weight: 500;
-                }
-                /* Month view event styling */
-                .fc-daygrid-event {
-                  font-size: 0.65rem;
-                  line-height: 1.1;
-                  padding: 1px 2px;
-                }
-                .fc-daygrid-event .fc-event-title {
-                  font-size: 0.65rem;
-                  font-weight: 300;
-                  overflow: hidden;
-                  text-overflow: ellipsis;
-                  white-space: nowrap;
-                }
-                .fc-daygrid-event .fc-event-time {
-                  font-size: 0.6rem;
-                  font-weight: 300;
-                  opacity: 0.8;
-                }
-              `}
-            </style>
-            <FullCalendar
-              ref={(calendar) => {
-                if (calendar) {
-                  window.calendar = calendar
-                }
-              }}
-              plugins={[dayGridPlugin, timeGridPlugin, resourceTimeGridPlugin, interactionPlugin]}
-              initialView="resourceTimeGridDay"
-              headerToolbar={false}
-              resources={rooms.map(room => ({
-                id: room.id.toString(),
-                title: room.name,
-              }))}
-              events={bookings}
-              selectable={true}
-              selectMirror={true}
-              dayMaxEvents={true}
-              weekends={true}
-              editable={true}
-              droppable={true}
-              select={handleDateSelect}
-              eventClick={handleEventClick}
-              eventDrop={handleEventDrop}
-              eventResize={handleEventResize}
-              dateClick={(info) => {
-                // Handle clicks on time slots in day/week views
-                handleDateSelect({
-                  start: info.date,
-                  end: info.date,
-                  startStr: info.date.toISOString(),
-                  endStr: info.date.toISOString(),
-                  jsEvent: info.jsEvent,
-                  view: info.view
-                })
-              }}
-              eventMouseEnter={(info) => {
-                const booking = info.event.extendedProps
-                const startTime = new Date(info.event.start)
-                const endTime = new Date(info.event.end)
-
-                info.el.setAttribute('title',
-                  `Guest: ${booking.guestName}\n` +
-                  `Email: ${booking.guestEmail || 'N/A'}\n` +
-                  `Phone: ${booking.guestPhone || 'N/A'}\n` +
-                  `Treatment: ${booking.treatment?.name || 'N/A'}\n` +
-                  `Therapist: ${booking.therapist?.name || 'N/A'}\n` +
-                  `Room: ${booking.room?.name || 'N/A'}\n` +
-                  `Time: ${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n` +
-                  `Duration: ${booking.treatment?.duration || 0} minutes\n` +
-                  `Status: ${booking.status}\n` +
-                  `Notes: ${booking.notes || 'No notes'}`
-                )
-              }}
-              viewDidMount={(info) => {
-                setCurrentView(info.view.type)
-                setCurrentDateRange({
-                  start: info.view.activeStart,
-                  end: info.view.activeEnd
-                })
-              }}
-              datesSet={(info) => {
-                setCurrentView(info.view.type)
-                setCurrentDateRange({
-                  start: info.view.activeStart,
-                  end: info.view.activeEnd
-                })
-              }}
-              height="auto"
-              slotMinTime="06:00:00"
-              slotMaxTime="23:00:00"
-              slotDuration="00:30:00"
+      {/* Body */}
+      <div className="flex flex-col lg:flex-row gap-4 items-start">
+        <section aria-label="Calendar" className="w-full flex-1 min-w-0 bg-white border border-gray-100 rounded-xl overflow-hidden">
+          {loading ? (
+            <div className="flex justify-center items-center h-96">
+              <div className="animate-spin rounded-full h-10 w-10 border-2 border-gray-100 border-t-gray-900" />
+            </div>
+          ) : view === 'month' ? (
+            <MonthGrid
+              date={date}
+              now={now}
+              bookingsByDay={bookingsByCol}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onOpenDay={openDay}
+              onCreate={(d) => openCreate(d, 9 * 60)}
+              onMoveToDay={handleMoveToDay}
             />
-          </div>
+          ) : view === 'day' && rooms.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-sm font-medium text-gray-900">No rooms yet</p>
+              <p className="mt-1 text-sm text-gray-500">Add rooms on the Rooms page to see the day schedule.</p>
+            </div>
+          ) : (
+            <TimeGrid
+              columns={view === 'day' ? dayColumns : weekColumns}
+              bookingsByCol={bookingsByCol}
+              selectedId={selectedId}
+              now={now}
+              minColWidth={view === 'day' ? 140 : 110}
+              compact={view === 'week'}
+              onSelect={setSelectedId}
+              onSlotClick={handleSlotClick}
+              onMove={handleMove}
+              onResize={handleResize}
+            />
+          )}
+        </section>
+
+        {showPanel && (
+          <BookingPanel
+            booking={selected}
+            now={now}
+            upNext={upNext}
+            onSelect={setSelectedId}
+            onEdit={() => selected && openEdit(selected)}
+            onComplete={() => selected && handleComplete(selected)}
+            onCancel={() => selected && handleCancelBooking(selected)}
+            onClose={() => setSelectedId(null)}
+          />
         )}
       </div>
 
-      {/* Popover for Create/Edit */}
-      {popover.isOpen && (
-        <div
-          className="fixed z-50"
-          style={{
-            left: `${popover.x}px`,
-            top: `${popover.y - 10}px`,
-            transform: 'translate(-50%, 0)'
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-32">
-            {popover.booking ? (
-              <button
-                onClick={() => handlePopoverAction('edit')}
-                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center"
-              >
-                <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                Edit Booking
-              </button>
-            ) : (
-              <button
-                onClick={() => handlePopoverAction('create')}
-                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center"
-              >
-                <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                New Booking
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      <p className="text-xs text-gray-500">
+        {view === 'month'
+          ? 'Drag a booking onto another day to move it. Click a date to open that day by room.'
+          : 'Drag a booking to move it, drag its bottom edge to change duration, or click an empty slot to start a new booking.'}
+      </p>
 
       {showModal && (
         <BookingModal
@@ -851,16 +474,8 @@ const Calendar = () => {
         />
       )}
 
-      {/* Custom Alert */}
-      {alert && (
-        <Alert
-          type={alert.type}
-          message={alert.message}
-          onClose={() => setAlert(null)}
-        />
-      )}
+      {alert && <Alert type={alert.type} message={alert.message} onClose={() => setAlert(null)} />}
 
-      {/* Custom Confirm Dialog */}
       {confirmDialog && (
         <ConfirmDialog
           isOpen={confirmDialog.isOpen}

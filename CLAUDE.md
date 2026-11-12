@@ -80,8 +80,13 @@ deactivated — Supabase Auth alone doesn't know about that flag.
 
 - `src/pages/` — one file per route (Calendar, Dashboard, Therapists, Rooms,
   Treatments, Products, Statistics, Login, Register), wired up in `App.jsx`.
-  `Calendar.jsx` contains both the calendar view and the booking create/edit
-  modal in one file.
+  `Calendar.jsx` contains the calendar page (state, data fetching, move/resize
+  confirmations) and the booking create/edit modal. The calendar itself is
+  hand-built — no calendar library — in `src/components/calendar/`:
+  `TimeGrid.jsx` (Day-by-room and Week views, pointer-event drag to move /
+  resize, click-to-create), `MonthGrid.jsx` (month overview, HTML5 drag onto
+  another day), `BookingPanel.jsx` (selected-booking details + quick actions)
+  and `calendarUtils.js` (date helpers, status colours, overlap lanes).
 - `src/services/api.js` — all Supabase data access, grouped by resource
   (`bookingAPI`, `therapistAPI`, `roomAPI`, `treatmentAPI`, `productAPI`,
   `statisticsAPI`, `authAPI`).
