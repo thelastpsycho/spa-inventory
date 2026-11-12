@@ -491,11 +491,17 @@ const Calendar = () => {
   )
 }
 
+const inputCls = 'w-full h-11 px-3.5 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-colors'
+const labelCls = 'block text-xs font-medium text-gray-700 mb-1.5'
+const sectionHeadCls = 'text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3'
+
 const BookingModal = ({ booking, treatments, therapists, rooms, setAlert, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     guest_name: booking?.guestName || '',
     guest_email: booking?.guestEmail || '',
     guest_phone: booking?.guestPhone || '',
+    nationality: booking?.nationality || '',
+    source: booking?.source || '',
     treatment_id: booking?.treatment?.id || '',
     therapist_id: booking?.therapist?.id || '',
     room_id: booking?.room?.id || '',
@@ -504,6 +510,7 @@ const BookingModal = ({ booking, treatments, therapists, rooms, setAlert, onClos
     duration: booking?.duration || '',
     notes: booking?.notes || '',
     status: booking?.status || 'tentative',
+    type: booking?.type || 'regular',
   })
   const [conflicts, setConflicts] = useState([])
   const [saving, setSaving] = useState(false)
@@ -591,22 +598,39 @@ const BookingModal = ({ booking, treatments, therapists, rooms, setAlert, onClos
     }
   }, [formData.therapist_id, formData.room_id, formData.appointment_date, formData.appointment_time, formData.duration, formData.treatment_id])
 
+  const selectedTreatment = treatments.find((t) => t.id === parseInt(formData.treatment_id))
+  const effectiveDuration = parseInt(formData.duration) || selectedTreatment?.duration || 0
+  const endsAt = formData.appointment_date && formData.appointment_time && effectiveDuration
+    ? new Date(new Date(`${formData.appointment_date}T${formData.appointment_time}`).getTime() + effectiveDuration * 60000)
+      .toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    : null
+
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white border border-gray-100 rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="border-b border-gray-200 px-4 py-3">
-          <h2 className="text-base font-semibold text-gray-900">
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900">
             {booking?.id ? 'Edit Booking' : 'New Booking'}
           </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="w-9 h-9 flex-none rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 flex items-center justify-center"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
         </div>
 
         {/* Content */}
-        <div className="p-4 overflow-y-auto flex-1">
+        <div className="px-6 py-5 overflow-y-auto flex-1">
           {conflicts.length > 0 && (
-            <div className="mb-4 bg-red-50 border border-red-200 p-3 rounded-lg">
+            <div className="mb-5 bg-red-50 border border-red-100 p-3.5 rounded-lg">
               <div className="flex items-start">
-                <svg className="w-4 h-4 text-red-600 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-red-600 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <div className="flex-1">
@@ -623,46 +647,60 @@ const BookingModal = ({ booking, treatments, therapists, rooms, setAlert, onClos
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {/* Guest Information */}
             <div>
-              <h3 className="text-xs font-semibold text-gray-900 mb-2">Guest Information</h3>
+              <h3 className={sectionHeadCls}>Guest Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Guest Name
-                  </label>
+                  <label className={labelCls}>Guest Name</label>
                   <input
                     type="text"
                     required
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={inputCls}
                     placeholder="Enter guest name"
                     value={formData.guest_name}
                     onChange={(e) => setFormData({ ...formData, guest_name: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Guest Email
-                  </label>
+                  <label className={labelCls}>Nationality</label>
+                  <input
+                    type="text"
+                    className={inputCls}
+                    placeholder="e.g. Australian"
+                    value={formData.nationality}
+                    onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Guest Email</label>
                   <input
                     type="email"
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-150"
+                    className={inputCls}
                     placeholder="guest@email.com"
                     value={formData.guest_email}
                     onChange={(e) => setFormData({ ...formData, guest_email: e.target.value })}
                   />
                 </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Guest Phone
-                  </label>
+                <div>
+                  <label className={labelCls}>Guest Phone</label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-150"
+                    className={inputCls}
                     placeholder="555-0100"
                     value={formData.guest_phone}
                     onChange={(e) => setFormData({ ...formData, guest_phone: e.target.value })}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className={labelCls}>Source / Company</label>
+                  <input
+                    type="text"
+                    className={inputCls}
+                    placeholder="e.g. Walk-in, Booking.com, ABC Travel"
+                    value={formData.source}
+                    onChange={(e) => setFormData({ ...formData, source: e.target.value })}
                   />
                 </div>
               </div>
@@ -670,12 +708,37 @@ const BookingModal = ({ booking, treatments, therapists, rooms, setAlert, onClos
 
             {/* Booking Details */}
             <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-4 tracking-tight">Booking Details</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <h3 className={sectionHeadCls}>Booking Details</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Treatment
-                  </label>
+                  <label className={labelCls}>Type</label>
+                  <select
+                    value={formData.type}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    className={inputCls}
+                    required
+                  >
+                    <option value="regular">Regular</option>
+                    <option value="package">Package</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className={inputCls}
+                    required
+                  >
+                    {STATUS_ORDER.map((k) => (
+                      <option key={k} value={k}>{STATUS[k].label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className={labelCls}>Treatment</label>
                   <SearchableDropdown
                     options={treatments}
                     value={formData.treatment_id}
@@ -694,9 +757,7 @@ const BookingModal = ({ booking, treatments, therapists, rooms, setAlert, onClos
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Therapist
-                  </label>
+                  <label className={labelCls}>Therapist</label>
                   <SearchableDropdown
                     options={therapists}
                     value={formData.therapist_id}
@@ -707,9 +768,7 @@ const BookingModal = ({ booking, treatments, therapists, rooms, setAlert, onClos
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Room
-                  </label>
+                  <label className={labelCls}>Room</label>
                   <SearchableDropdown
                     options={rooms}
                     value={formData.room_id}
@@ -720,101 +779,67 @@ const BookingModal = ({ booking, treatments, therapists, rooms, setAlert, onClos
                     required={true}
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Status
-                  </label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-150"
-                    required
-                  >
-                    <option value="tentative">⏸️ Tentative</option>
-                    <option value="confirmed">✅ Confirmed</option>
-                    <option value="completed">✓ Completed</option>
-                    <option value="waiting_list">📋 Waiting List</option>
-                    <option value="cancelled">❌ Cancelled</option>
-                  </select>
-                </div>
               </div>
             </div>
 
             {/* Time */}
             <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-4 tracking-tight">Appointment Time</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <h3 className={sectionHeadCls}>Appointment Time</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Date
-                  </label>
+                  <label className={labelCls}>Date</label>
                   <input
                     type="date"
                     required
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-150"
+                    className={inputCls}
                     value={formData.appointment_date}
                     onChange={(e) => setFormData({ ...formData, appointment_date: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Time
-                  </label>
+                  <label className={labelCls}>Time</label>
                   <input
                     type="time"
                     required
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-150"
+                    className={inputCls}
                     value={formData.appointment_time}
                     onChange={(e) => setFormData({ ...formData, appointment_time: e.target.value })}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Duration (minutes)
-                  </label>
+                  <label className={labelCls}>Duration (minutes)</label>
                   <input
                     type="number"
                     min="1"
-                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-150"
-                    placeholder={treatments.find(t => t.id === parseInt(formData.treatment_id))?.duration || 'Auto'}
+                    className={inputCls}
+                    placeholder={selectedTreatment?.duration ? String(selectedTreatment.duration) : 'Auto'}
                     value={formData.duration}
                     onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
                   />
                 </div>
               </div>
               {formData.treatment_id && (
-                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-start">
-                    <svg className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div className="flex-1">
-                      <p className="text-sm text-blue-900">
-                        <span className="font-medium">Treatment duration:</span> {treatments.find(t => t.id === parseInt(formData.treatment_id))?.duration || 0} minutes
-                        {formData.duration && (
-                          <span className="ml-2">
-                            • <span className="font-medium">Custom duration:</span> {formData.duration} minutes
-                          </span>
-                        )}
-                        {formData.appointment_date && formData.appointment_time && (formData.duration || treatments.find(t => t.id === parseInt(formData.treatment_id))?.duration) && (
-                          <span className="ml-2 block mt-1">
-                            <span className="font-medium">Ends at:</span> {new Date(new Date(`${formData.appointment_date}T${formData.appointment_time}`).getTime() + (parseInt(formData.duration) || treatments.find(t => t.id === parseInt(formData.treatment_id))?.duration || 0) * 60000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  </div>
+                <div className="mt-3 p-3.5 bg-gray-50 border border-gray-100 rounded-lg text-sm text-gray-700">
+                  <span className="font-medium text-gray-900">Treatment duration:</span> {selectedTreatment?.duration || 0} minutes
+                  {formData.duration && (
+                    <span className="ml-2">
+                      · <span className="font-medium text-gray-900">Custom:</span> {formData.duration} minutes
+                    </span>
+                  )}
+                  {endsAt && (
+                    <span className="ml-2 block mt-1">
+                      <span className="font-medium text-gray-900">Ends at:</span> {endsAt}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
 
             {/* Notes */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Notes
-              </label>
+              <label className={labelCls}>Notes</label>
               <textarea
-                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-150"
+                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent transition-colors"
                 rows="3"
                 placeholder="Add any special requests or notes..."
                 value={formData.notes}
@@ -823,18 +848,18 @@ const BookingModal = ({ booking, treatments, therapists, rooms, setAlert, onClos
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+            <div className="flex justify-end gap-3 pt-5 border-t border-gray-100">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all duration-150"
+                className="h-11 px-5 border border-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={saving || conflicts.length > 0}
-                className="px-5 py-2.5 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150"
+                className="h-11 px-5 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {saving ? 'Saving...' : 'Save Booking'}
               </button>

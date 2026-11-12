@@ -1,12 +1,22 @@
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+
+// Tooltip shown next to a nav item on hover — only rendered on desktop,
+// where the sidebar stays permanently collapsed to an icon rail.
+const Tooltip = ({ children }) => (
+  <span
+    role="tooltip"
+    className="hidden lg:block absolute left-full top-1/2 -translate-y-1/2 ml-2 px-2.5 py-1.5 rounded-md bg-gray-900 text-white text-xs font-medium whitespace-nowrap opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition pointer-events-none z-50 shadow-lg"
+  >
+    {children}
+  </span>
+)
 
 const Layout = () => {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [isSidebarOpen, setSidebarOpen] = useState(true)
   const [isMobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const handleLogout = async () => {
@@ -52,12 +62,6 @@ const Layout = () => {
     )},
   ]
 
-  useEffect(() => {
-    if (window.innerWidth < 1024) {
-      setSidebarOpen(false)
-    }
-  }, [])
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Mobile Overlay */}
@@ -68,50 +72,27 @@ const Layout = () => {
         ></div>
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — full drawer on mobile when opened, permanently collapsed icon rail on desktop */}
       <aside
         className={`
-          fixed top-0 left-0 h-full bg-white z-50
-          transition-all duration-300 ease-in-out
-          ${isSidebarOpen ? 'w-72' : 'w-20'}
+          fixed top-0 left-0 h-full bg-white z-50 w-72 lg:w-20
+          transition-transform duration-300 ease-in-out
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
         `}
       >
         {/* Logo Section */}
-        <div className="h-20 flex items-center justify-between px-6">
-          {isSidebarOpen && (
-            <Link to="/" className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center">
-                <span className="text-white text-base font-semibold">S</span>
-              </div>
-              <span className="font-semibold text-gray-900 text-base">Spa Admin</span>
-            </Link>
-          )}
-          {!isSidebarOpen && (
-            <Link to="/" className="mx-auto">
-              <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center">
-                <span className="text-white text-base font-semibold">S</span>
-              </div>
-            </Link>
-          )}
-          <button
-            onClick={() => setSidebarOpen(!isSidebarOpen)}
-            className="hidden lg:flex p-2 rounded-xl hover:bg-gray-100 transition-colors"
-          >
-            <svg
-              className={`w-5 h-5 text-gray-500 transition-transform duration-300 ${isSidebarOpen ? 'rotate-180' : ''}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+        <div className="h-20 flex items-center px-6 lg:justify-center lg:px-0">
+          <Link to="/" className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center flex-shrink-0">
+              <span className="text-white text-base font-semibold">S</span>
+            </div>
+            <span className="font-semibold text-gray-900 text-base lg:hidden">Spa Admin</span>
+          </Link>
         </div>
 
         {/* Navigation */}
-        <nav className="px-4 space-y-0.5 overflow-y-auto h-[calc(100vh-180px)]">
+        <nav className="px-4 lg:px-3 space-y-0.5">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path
             return (
@@ -119,22 +100,16 @@ const Layout = () => {
                 key={item.path}
                 to={item.path}
                 className={`
-                  relative flex items-center px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
-                  ${isActive
-                    ? 'bg-gray-900 text-white'
-                    : 'text-gray-600 hover:bg-gray-100'
-                  }
-                  ${!isSidebarOpen ? 'justify-center px-3' : ''}
+                  group relative flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors duration-200
+                  lg:justify-center lg:px-0
+                  ${isActive ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}
                 `}
               >
                 <span className="flex-shrink-0">
                   {item.icon}
                 </span>
-                {isSidebarOpen && (
-                  <span className="ml-3">
-                    {item.label}
-                  </span>
-                )}
+                <span className="lg:hidden">{item.label}</span>
+                <Tooltip>{item.label}</Tooltip>
               </Link>
             )
           })}
@@ -142,42 +117,42 @@ const Layout = () => {
 
         {/* User Section */}
         <div className="absolute bottom-0 left-0 right-0 p-4">
-          {isSidebarOpen ? (
-            <div className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
-                  {user?.name?.charAt(0) || 'U'}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {user?.name}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Admin
-                  </p>
-                </div>
+          <div className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors lg:hidden">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+                {user?.name?.charAt(0) || 'U'}
               </div>
-              <button
-                onClick={handleLogout}
-                className="p-2 rounded-lg hover:bg-gray-200 text-gray-500 transition-colors"
-                title="Logout"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-              </button>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
+                <p className="text-xs text-gray-500">Admin</p>
+              </div>
             </div>
-          ) : (
             <button
               onClick={handleLogout}
-              className="w-full p-3 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-200 text-gray-500 transition-colors"
               title="Logout"
             >
-              <svg className="w-5 h-5 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
             </button>
-          )}
+          </div>
+
+          <div className="hidden lg:flex lg:flex-col lg:items-center lg:gap-2">
+            <div className="group relative w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white text-sm font-semibold">
+              {user?.name?.charAt(0) || 'U'}
+              <Tooltip>{user?.name || 'User'}</Tooltip>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="group relative w-full p-3 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors flex items-center justify-center"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <Tooltip>Logout</Tooltip>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -205,13 +180,7 @@ const Layout = () => {
       </header>
 
       {/* Main Content */}
-      <main
-        className={`
-          transition-all duration-300 ease-in-out
-          ${isSidebarOpen ? 'lg:ml-72' : 'lg:ml-20'}
-          pt-20 lg:pt-0
-        `}
-      >
+      <main className="lg:ml-20 pt-20 lg:pt-0">
         <div className="p-6 lg:p-10">
           <Outlet />
         </div>

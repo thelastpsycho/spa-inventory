@@ -48,38 +48,53 @@ const BookingPanel = ({ booking, now, upNext = [], onSelect, onEdit, onComplete,
             </div>
 
             <dl className="m-0 grid grid-cols-[96px_1fr] gap-y-2.5 text-sm">
+              <Row label="Type">{booking.raw.type === 'package' ? 'Package' : 'Regular'}</Row>
               <Row label="Treatment">{booking.treatment?.name || '—'}</Row>
               <Row label="Therapist">{booking.therapist?.name || '—'}</Row>
               <Row label="Room">{booking.room?.name || '—'}</Row>
               <Row label="Email">{booking.raw.guest_email || '—'}</Row>
               <Row label="Phone">{booking.raw.guest_phone || '—'}</Row>
+              <Row label="Nationality">{booking.raw.nationality || '—'}</Row>
+              <Row label="Source">{booking.raw.source || '—'}</Row>
               <Row label="Notes"><span className="text-gray-700">{booking.raw.notes || 'No notes'}</span></Row>
             </dl>
 
-            <div className="flex flex-wrap gap-2 pt-4 border-t border-gray-100">
+            <div className="flex gap-2 pt-4 border-t border-gray-100">
               <button
                 type="button"
                 onClick={onEdit}
-                className="flex-auto h-11 px-4 rounded-lg bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800"
+                title="Edit booking"
+                aria-label="Edit booking"
+                className="flex-auto h-11 rounded-lg bg-gray-900 text-white flex items-center justify-center hover:bg-gray-800"
               >
-                Edit booking
+                <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
               </button>
               {booking.status !== 'completed' && booking.status !== 'cancelled' && (
                 <button
                   type="button"
                   onClick={onComplete}
-                  className="h-11 px-4 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50"
+                  title="Mark completed"
+                  aria-label="Mark completed"
+                  className="flex-auto h-11 rounded-lg border border-gray-200 bg-white text-gray-700 flex items-center justify-center hover:bg-gray-50"
                 >
-                  Mark completed
+                  <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M5 13l4 4L19 7" />
+                  </svg>
                 </button>
               )}
               {booking.status !== 'cancelled' && (
                 <button
                   type="button"
                   onClick={onCancel}
-                  className="h-11 px-4 rounded-lg border border-red-200 bg-white text-red-700 text-sm font-medium hover:bg-red-50"
+                  title="Cancel booking"
+                  aria-label="Cancel booking"
+                  className="flex-auto h-11 rounded-lg border border-red-200 bg-white text-red-700 flex items-center justify-center hover:bg-red-50"
                 >
-                  Cancel
+                  <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
                 </button>
               )}
             </div>
