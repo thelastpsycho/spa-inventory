@@ -11,12 +11,10 @@ logic was ported into Postgres triggers/functions.
 
 ## Commands
 
-All commands run from `frontend/`:
-
 ```bash
 npm install
 npm run dev       # Vite dev server on http://localhost:3000
-npm run build     # production build to frontend/dist
+npm run build     # production build to dist/
 npm run preview   # serve the production build locally
 npm run lint      # eslint — note: no eslint config file exists yet, this currently errors out of the box
 ```
@@ -33,10 +31,10 @@ supabase db push
 
 ## Architecture
 
-**No backend server.** The frontend (`frontend/src`) talks straight to
+**No backend server.** The frontend (`src`) talks straight to
 Supabase via `@supabase/supabase-js`. Anything that used to be
 application-layer logic in the old Laravel app now lives either in
-`frontend/src/services/api.js` or directly in Postgres
+`src/services/api.js` or directly in Postgres
 (`supabase/migrations/20261112120000_init_schema.sql`):
 
 - **`bookings_before_write()`** trigger (BEFORE INSERT/UPDATE on `bookings`) —
@@ -66,14 +64,14 @@ application-layer logic in the old Laravel app now lives either in
   real admin/staff permission split), while `profiles` restricts rows to
   their owner.
 
-**`frontend/src/services/api.js`** wraps `supabase-js` calls behind the same
+**`src/services/api.js`** wraps `supabase-js` calls behind the same
 shape the old axios client used (`{ data }` on success, thrown `Error` with
 `.response.data.message` on failure). This was intentional so the page
 components didn't need to change when the backend did — keep that contract
 if you touch this file, since every page's error handling (`error.response?.data?.message`)
 depends on it.
 
-**`frontend/src/contexts/AuthContext.jsx`** wraps Supabase Auth
+**`src/contexts/AuthContext.jsx`** wraps Supabase Auth
 (`signInWithPassword`/`signUp`/`signOut`) and additionally checks
 `profiles.is_active`, signing the user back out if their account has been
 deactivated — Supabase Auth alone doesn't know about that flag.
@@ -94,7 +92,7 @@ deactivated — Supabase Auth alone doesn't know about that flag.
 
 ## Environment
 
-`frontend/.env` (gitignored, see `frontend/.env.example`):
+`.env` (gitignored, see `.env.example`):
 
 ```
 VITE_SUPABASE_URL=

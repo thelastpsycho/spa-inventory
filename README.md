@@ -65,7 +65,6 @@ A comprehensive spa management system with a Supabase (Postgres) backend and a R
 ### Frontend Setup
 
 ```bash
-cd frontend
 npm install
 cp .env.example .env
 ```
@@ -87,16 +86,14 @@ Visit http://localhost:3000
 ```
 spa-inventory/
 ├── supabase/
-│   └── migrations/         # Schema, RLS policies, triggers/functions, mock data
-├── frontend/                # React app
-│   ├── src/
-│   │   ├── components/      # Reusable components
-│   │   ├── contexts/        # React context (auth)
-│   │   ├── lib/              # Supabase client
-│   │   ├── pages/            # Page components
-│   │   └── services/         # Supabase data access (api.js)
-│   └── package.json
-└── .planning/               # Project planning
+│   └── migrations/      # Schema, RLS policies, triggers/functions, mock data
+├── src/
+│   ├── components/      # Reusable components
+│   ├── contexts/        # React context (auth)
+│   ├── lib/             # Supabase client
+│   ├── pages/           # Page components
+│   └── services/        # Supabase data access (api.js)
+└── package.json
 ```
 
 ## Database Logic
@@ -136,7 +133,6 @@ The system automatically prevents:
 
 ### Code Style
 ```bash
-cd frontend
 npm run lint
 ```
 

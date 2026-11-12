@@ -53,7 +53,7 @@ levels.
   `supabase/migrations/`
 - **Frontend**: React 18 + Vite + Tailwind CSS, deployed to Vercel
 - **Data access**: `@supabase/supabase-js` directly from the browser, no
-  custom API layer beyond a thin wrapper (`frontend/src/services/api.js`)
+  custom API layer beyond a thin wrapper (`src/services/api.js`)
 - **No server-side application code** — anything that would normally live in
   a backend controller/service now lives in a Postgres trigger or RPC
   function (see `CLAUDE.md` for specifics)
