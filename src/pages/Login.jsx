@@ -34,7 +34,7 @@ const Login = () => {
         <img src={loginImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-stone-950/70 via-stone-950/10 to-stone-950/30" />
         <div className="absolute bottom-10 left-10 right-10 text-white">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-300">Kael Luxury Spa</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-300">Sakanti Spa</p>
           <p className="mt-2 text-2xl font-light leading-snug" style={{ fontFamily: 'Georgia, serif' }}>
             Calm spaces, considered care.
           </p>
@@ -53,7 +53,7 @@ const Login = () => {
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-stone-900 mb-6 shadow-lg">
               <span className="text-white text-2xl font-light tracking-wider" style={{ fontFamily: 'Georgia, serif' }}>
-                K
+                S
               </span>
             </div>
             <h1 className="text-2xl font-semibold text-stone-900">Welcome back</h1>
