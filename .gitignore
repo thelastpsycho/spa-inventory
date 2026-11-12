@@ -1,35 +1,10 @@
-### Laravel (backend)
-backend/.env
-backend/.env.*
-!backend/.env.example
-
-backend/vendor/
-
-# Laravel caches / runtime files
-backend/bootstrap/cache/*
-!backend/bootstrap/cache/.gitignore
-
-backend/storage/*.key
-backend/storage/app/*
-!backend/storage/app/.gitignore
-!backend/storage/app/public/
-!backend/storage/app/public/.gitignore
-
-backend/storage/framework/cache/*
-backend/storage/framework/sessions/*
-backend/storage/framework/views/*
-backend/storage/logs/*
-
-# Local dev (Laravel)
-backend/public/storage
-backend/public/hot
-
 ### React (frontend)
 frontend/node_modules/
 frontend/dist/
 
 frontend/.env
 frontend/.env.*
+!frontend/.env.example
 
 ### Node / frontend tooling caches (generic)
 **/.cache/
@@ -63,10 +38,8 @@ yarn-error.log*
 pnpm-debug.log*
 
 ### Testing
-backend/tests/coverage/
 frontend/coverage/
 
-### PHP tooling / misc
-.env.backup
-.phpunit.result.cache
-.php-cs-fixer.cache
+### Supabase
+supabase/.branches/
+supabase/.temp/

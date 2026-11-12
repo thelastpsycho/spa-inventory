@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { authAPI } from '../services/api'
+import { supabase } from '../lib/supabaseClient'
 
 const AuthContext = createContext(null)
 
@@ -11,84 +11,83 @@ export const useAuth = () => {
   return context
 }
 
+const authError = (message) => {
+  const err = new Error(message)
+  err.response = { data: { message } }
+  return err
+}
+
+const loadProfile = async (authUser) => {
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', authUser.id)
+    .single()
+
+  if (error) throw authError(error.message)
+  return { ...profile, email: authUser.email }
+}
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const checkAuth = async () => {
-      const token = localStorage.getItem('token')
-      const savedUser = localStorage.getItem('user')
-
-      if (token && savedUser) {
+      const { data } = await supabase.auth.getSession()
+      if (data?.session?.user) {
         try {
-          const response = await authAPI.me()
-          setUser(response.data)
-        } catch (error) {
-          localStorage.removeItem('token')
-          localStorage.removeItem('user')
+          setUser(await loadProfile(data.session.user))
+        } catch {
+          setUser(null)
         }
       }
       setLoading(false)
     }
 
     checkAuth()
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) setUser(null)
+    })
+
+    return () => listener.subscription.unsubscribe()
   }, [])
 
   const login = async (email, password) => {
-    console.log('🔑 AuthContext: Starting login process')
-    console.log('📧 Email:', email)
-    console.log('🔒 Password length:', password?.length)
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw authError(error.message)
 
-    try {
-      const response = await authAPI.login({ email, password })
-      console.log('📡 API Response received:', response.status)
-      console.log('📦 Response data:', response.data)
-
-      const { user, token } = response.data
-      console.log('👤 User:', user)
-      console.log('🎫 Token:', token?.substring(0, 20) + '...')
-
-      localStorage.setItem('token', token)
-      localStorage.setItem('user', JSON.stringify(user))
-      setUser(user)
-
-      console.log('✅ Login process completed successfully')
-      return user
-    } catch (error) {
-      console.error('💥 AuthContext: Login error:', error)
-      console.error('💥 Error config:', error.config)
-      console.error('💥 Error response:', error.response)
-      throw error
+    const profile = await loadProfile(data.user)
+    if (!profile.is_active) {
+      await supabase.auth.signOut()
+      throw authError('Account is inactive')
     }
+
+    setUser(profile)
+    return profile
   }
 
-  const register = async (name, email, password, passwordConfirmation) => {
-    const response = await authAPI.register({
-      name,
+  const register = async (name, email, password) => {
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      password_confirmation: passwordConfirmation,
+      options: { data: { name } },
     })
-    const { user, token } = response.data
+    if (error) throw authError(error.message)
 
-    localStorage.setItem('token', token)
-    localStorage.setItem('user', JSON.stringify(user))
-    setUser(user)
+    if (!data.session) {
+      throw authError('Check your email to confirm your account before signing in.')
+    }
 
-    return user
+    const profile = await loadProfile(data.user)
+    setUser(profile)
+    return profile
   }
 
   const logout = async () => {
-    try {
-      await authAPI.logout()
-    } catch (error) {
-      console.error('Logout error:', error)
-    } finally {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      setUser(null)
-    }
+    await supabase.auth.signOut()
+    setUser(null)
   }
 
   const value = {

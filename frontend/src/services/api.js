@@ -1,119 +1,168 @@
-import axios from 'axios'
+import { supabase } from '../lib/supabaseClient'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
-const api = axios.create({
-  baseURL: `${API_URL}/api`,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-})
-
-// Add auth token to requests
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+// Keep the old axios-shaped contract (`response.data`, thrown errors with
+// `error.response.data.message`) so pages written against the Laravel API
+// don't need to change their call sites.
+const unwrap = ({ data, error }) => {
+  if (error) {
+    const err = new Error(error.message)
+    err.response = { data: { message: error.message } }
+    throw err
   }
+  return { data }
+}
 
-  // Log outgoing requests
-  console.log('🚀 API Request:', {
-    method: config.method?.toUpperCase(),
-    url: config.baseURL + config.url,
-    headers: config.headers,
-    data: config.data,
-    params: config.params,
-    timestamp: new Date().toISOString()
-  })
-
-  return config
-})
-
-// Handle auth errors
-api.interceptors.response.use(
-  (response) => {
-    // Log successful responses
-    console.log('✅ API Response:', {
-      status: response.status,
-      url: response.config.url,
-      data: response.data,
-      timestamp: new Date().toISOString()
-    })
-    return response
-  },
-  (error) => {
-    // Log errors
-    console.error('❌ API Error:', {
-      message: error.message,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      url: error.config?.url,
-      method: error.config?.method?.toUpperCase(),
-      requestData: error.config?.data,
-      responseData: error.response?.data,
-      timestamp: new Date().toISOString()
-    })
-
-    if (error.response?.status === 401) {
-      console.log('🔒 Unauthorized - redirecting to login')
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
-      window.location.href = '/login'
+// Postgres rejects '' for integer/numeric columns (Laravel's validator was
+// more forgiving), so empty-string fields are dropped before hitting the DB.
+const sanitize = (data) => {
+  const clean = {}
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== '' && value !== undefined) {
+      clean[key] = value
     }
-    return Promise.reject(error)
   }
-)
+  return clean
+}
+
+const BOOKING_SELECT = '*, treatment:treatments(*), therapist:therapists(*), room:rooms(*)'
 
 export const authAPI = {
-  register: (data) => api.post('/register', data),
-  login: (data) => api.post('/login', data),
-  logout: () => api.post('/logout'),
-  me: () => api.get('/me'),
+  me: async () => {
+    const { data: auth, error: authError } = await supabase.auth.getUser()
+    if (authError || !auth?.user) {
+      return unwrap({ data: null, error: authError || new Error('Not authenticated') })
+    }
+    const result = await supabase.from('profiles').select('*').eq('id', auth.user.id).single()
+    return unwrap({
+      data: result.data ? { ...result.data, email: auth.user.email } : null,
+      error: result.error,
+    })
+  },
 }
 
 export const bookingAPI = {
-  getAll: (params) => api.get('/bookings', { params }),
-  get: (id) => api.get(`/bookings/${id}`),
-  create: (data) => api.post('/bookings', data),
-  update: (id, data) => api.put(`/bookings/${id}`, data),
-  delete: (id) => api.delete(`/bookings/${id}`),
-  checkConflicts: (params) => api.get('/bookings/conflicts/check', { params }),
+  getAll: async (params = {}) => {
+    let query = supabase.from('bookings').select(BOOKING_SELECT).is('deleted_at', null)
+
+    if (params.include_cancelled !== 'true') {
+      query = query.neq('status', 'cancelled')
+    }
+    if (params.start && params.end) {
+      const endOfDay = params.end.length === 10 ? `${params.end}T23:59:59` : params.end
+      query = query.gte('start_time', params.start).lte('start_time', endOfDay)
+    }
+    if (params.therapist_id) query = query.eq('therapist_id', params.therapist_id)
+    if (params.room_id) query = query.eq('room_id', params.room_id)
+    if (params.treatment_id) query = query.eq('treatment_id', params.treatment_id)
+    if (params.search) {
+      query = query.or(
+        `guest_name.ilike.%${params.search}%,guest_phone.ilike.%${params.search}%,guest_email.ilike.%${params.search}%`
+      )
+    }
+
+    const result = await query.order('start_time')
+    return unwrap(result)
+  },
+  get: async (id) => {
+    const result = await supabase.from('bookings').select(BOOKING_SELECT).eq('id', id).single()
+    return unwrap(result)
+  },
+  create: async (data) => {
+    const result = await supabase
+      .from('bookings')
+      .insert(sanitize(data))
+      .select(BOOKING_SELECT)
+      .single()
+    return unwrap(result)
+  },
+  update: async (id, data) => {
+    const result = await supabase
+      .from('bookings')
+      .update(sanitize(data))
+      .eq('id', id)
+      .select(BOOKING_SELECT)
+      .single()
+    return unwrap(result)
+  },
+  delete: async (id) => {
+    const result = await supabase.rpc('delete_booking', { p_booking_id: id })
+    return unwrap({ data: { message: 'Booking deleted successfully' }, error: result.error })
+  },
+  checkConflicts: async (params) => {
+    const result = await supabase.rpc('check_booking_conflicts', {
+      p_therapist_id: params.therapist_id || null,
+      p_room_id: params.room_id || null,
+      p_start_time: params.start_time || null,
+      p_end_time: params.end_time || null,
+      p_exclude_booking_id: params.exclude_booking_id || null,
+    })
+    const conflicts = result.data || []
+    return unwrap({
+      data: { has_conflicts: conflicts.length > 0, conflicts },
+      error: result.error,
+    })
+  },
 }
 
-export const therapistAPI = {
-  getAll: () => api.get('/therapists'),
-  get: (id) => api.get(`/therapists/${id}`),
-  create: (data) => api.post('/therapists', data),
-  update: (id, data) => api.put(`/therapists/${id}`, data),
-  delete: (id) => api.delete(`/therapists/${id}`),
-}
+const makeResourceAPI = (table) => ({
+  getAll: async () => {
+    const result = await supabase
+      .from(table)
+      .select('*')
+      .is('deleted_at', null)
+      .eq('is_active', true)
+      .order('created_at')
+    return unwrap(result)
+  },
+  get: async (id) => {
+    const result = await supabase.from(table).select('*').eq('id', id).single()
+    return unwrap(result)
+  },
+  create: async (data) => {
+    const result = await supabase.from(table).insert(sanitize(data)).select().single()
+    return unwrap(result)
+  },
+  update: async (id, data) => {
+    const result = await supabase.from(table).update(sanitize(data)).eq('id', id).select().single()
+    return unwrap(result)
+  },
+  delete: async (id) => {
+    const result = await supabase
+      .from(table)
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', id)
+    return unwrap({ data: { message: 'Deleted successfully' }, error: result.error })
+  },
+})
 
-export const roomAPI = {
-  getAll: () => api.get('/rooms'),
-  get: (id) => api.get(`/rooms/${id}`),
-  create: (data) => api.post('/rooms', data),
-  update: (id, data) => api.put(`/rooms/${id}`, data),
-  delete: (id) => api.delete(`/rooms/${id}`),
-}
+export const therapistAPI = makeResourceAPI('therapists')
+export const roomAPI = makeResourceAPI('rooms')
+export const treatmentAPI = makeResourceAPI('treatments')
 
-export const treatmentAPI = {
-  getAll: () => api.get('/treatments'),
-  get: (id) => api.get(`/treatments/${id}`),
-  create: (data) => api.post('/treatments', data),
-  update: (id, data) => api.put(`/treatments/${id}`, data),
-  delete: (id) => api.delete(`/treatments/${id}`),
-}
-
+const productResourceAPI = makeResourceAPI('products')
 export const productAPI = {
-  getAll: (params) => api.get('/products', { params }),
-  get: (id) => api.get(`/products/${id}`),
-  create: (data) => api.post('/products', data),
-  update: (id, data) => api.put(`/products/${id}`, data),
-  delete: (id) => api.delete(`/products/${id}`),
+  ...productResourceAPI,
+  getAll: async (params = {}) => {
+    const result = await supabase
+      .from('products')
+      .select('*')
+      .is('deleted_at', null)
+      .eq('is_active', true)
+      .order('created_at')
+    const { data } = unwrap(result)
+    if (params.low_stock === true || params.low_stock === 'true') {
+      return { data: data.filter((p) => p.quantity <= p.reorder_level) }
+    }
+    return { data }
+  },
 }
 
 export const statisticsAPI = {
-  get: (params) => api.get('/statistics', { params }),
+  get: async (params = {}) => {
+    const result = await supabase.rpc('get_statistics', {
+      p_start_date: params.start_date || null,
+      p_end_date: params.end_date || null,
+    })
+    return unwrap(result)
+  },
 }
-
-export default api

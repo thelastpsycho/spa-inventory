@@ -1,13 +1,13 @@
 # Spa Inventory & Booking System
 
-A comprehensive spa management system with API-first Laravel backend and React frontend. Enables spa staff to manage bookings through an intuitive calendar interface, track inventory consumption, and prevent scheduling conflicts.
+A comprehensive spa management system with a Supabase (Postgres) backend and a React frontend. Enables spa staff to manage bookings through an intuitive calendar interface, track inventory consumption, and prevent scheduling conflicts.
 
 ## Features
 
 ### 📅 Calendar & Booking Management
 - **Interactive Calendar**: Daily, weekly, and monthly views with FullCalendar
 - **Drag-and-Drop**: Easy booking creation and modification
-- **Conflict Prevention**: Real-time detection of therapist and room conflicts
+- **Conflict Prevention**: Database-enforced detection of therapist and room conflicts
 - **Booking Management**: Full CRUD operations with guest details
 
 ### 👥 Resource Management
@@ -23,20 +23,20 @@ A comprehensive spa management system with API-first Laravel backend and React f
 - **Usage History**: Track product consumption per booking
 
 ### 🔐 Authentication
-- **Secure Access**: Laravel Sanctum token-based authentication
-- **User Management**: Admin and staff roles
+- **Secure Access**: Supabase Auth (email/password)
+- **Row Level Security**: Every table is protected by Postgres RLS policies
 - **Session Management**: Persistent logins with auto-logout
 
 ## Tech Stack
 
-### Backend
-- **Laravel 11**: Modern PHP framework
-- **PostgreSQL**: Advanced relational database
-- **Sanctum**: API authentication
-- **API-First**: Clean separation of concerns
+### Database / Backend
+- **Supabase**: Postgres database, Auth, and auto-generated REST API (PostgREST)
+- **No application server**: conflict detection, inventory sync, and statistics
+  live in Postgres functions/triggers (see `supabase/migrations/`)
 
 ### Frontend
 - **React 18**: Modern UI library
+- **@supabase/supabase-js**: Talks to Supabase directly from the browser
 - **Tailwind CSS**: Utility-first styling
 - **FullCalendar**: Professional calendar component
 - **Vite**: Fast build tool
@@ -44,41 +44,39 @@ A comprehensive spa management system with API-first Laravel backend and React f
 ## Quick Start
 
 ### Prerequisites
-- PHP 8.2+
-- Composer
 - Node.js 18+
-- PostgreSQL 12+
+- A Supabase project ([supabase.com](https://supabase.com))
+- Supabase CLI (optional, for pushing migrations): `npm install -g supabase`
 
-### Backend Setup
+### Database Setup
 
-```bash
-cd backend
-composer install
-cp .env.example .env
-php artisan key:generate
-```
+1. Create a Supabase project and grab its Project URL and publishable (anon) key from
+   **Project Settings → API**.
+2. Apply the migrations in `supabase/migrations/` in order — either:
+   - Paste each file's contents into the Supabase Dashboard's **SQL Editor** and run them, or
+   - `supabase link --project-ref <your-project-ref>` then `supabase db push`
 
-Configure `.env`:
-```env
-DB_CONNECTION=pgsql
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_DATABASE=spa_booking
-DB_USERNAME=your_username
-DB_PASSWORD=your_password
-```
-
-```bash
-createdb spa_booking
-php artisan migrate
-php artisan serve
-```
+   This creates all tables, RLS policies, and the Postgres functions/triggers
+   that replace the old Laravel business logic, and seeds a small set of
+   mock therapists/rooms/treatments/products/bookings.
+3. Sign up for an account from the app's `/register` page — a `profiles` row
+   is created automatically (via a trigger on `auth.users`) with `role: admin`.
 
 ### Frontend Setup
 
 ```bash
 cd frontend
 npm install
+cp .env.example .env
+```
+
+Fill in `.env`:
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+```bash
 npm run dev
 ```
 
@@ -88,47 +86,37 @@ Visit http://localhost:3000
 
 ```
 spa-inventory/
-├── backend/                 # Laravel API
-│   ├── app/
-│   │   ├── Http/           # Controllers, Requests
-│   │   ├── Models/         # Eloquent models
-│   │   └── Services/       # Business logic
-│   ├── database/
-│   │   └── migrations/     # Database schema
-│   └── routes/
-│       └── api.php         # API routes
-├── frontend/               # React app
+├── supabase/
+│   └── migrations/         # Schema, RLS policies, triggers/functions, mock data
+├── frontend/                # React app
 │   ├── src/
-│   │   ├── components/     # Reusable components
-│   │   ├── contexts/       # React context
-│   │   ├── pages/          # Page components
-│   │   └── services/       # API calls
+│   │   ├── components/      # Reusable components
+│   │   ├── contexts/        # React context (auth)
+│   │   ├── lib/              # Supabase client
+│   │   ├── pages/            # Page components
+│   │   └── services/         # Supabase data access (api.js)
 │   └── package.json
-└── .planning/              # Project planning
+└── .planning/               # Project planning
 ```
 
-## API Documentation
+## Database Logic
 
-### Authentication
-- `POST /api/register` - Create new admin account
-- `POST /api/login` - Authenticate user
-- `POST /api/logout` - End session
-- `GET /api/me` - Get current user
+Since there's no application server, the following live directly in Postgres
+(`supabase/migrations/20261112120000_init_schema.sql`):
 
-### Bookings
-- `GET /api/bookings` - List bookings (supports filtering)
-- `POST /api/bookings` - Create booking
-- `PUT /api/bookings/{id}` - Update booking
-- `DELETE /api/bookings/{id}` - Delete booking
-- `GET /api/bookings/conflicts/check` - Check for conflicts
-
-### Resources
-- `GET /api/therapists` - List therapists
-- `GET /api/rooms` - List rooms
-- `GET /api/treatments` - List treatments
-- `GET /api/products` - List products (with low_stock filter)
-
-All resources support full CRUD operations.
+- **`bookings_before_write()`** trigger — derives `end_time`/`duration` from
+  the treatment, and rejects (raises an exception) any insert/update that
+  would double-book a therapist or room for an active (`confirmed`/`tentative`) booking.
+- **`check_booking_conflicts(...)`** RPC — non-blocking conflict preview used
+  by the booking form while the user is still filling it in.
+- **`booking_products_*`** triggers — deduct/restore product stock whenever
+  products are attached to or detached from a booking.
+- **`delete_booking(id)`** RPC — soft-deletes a booking and restores any
+  inventory it had reserved.
+- **`get_statistics(start_date, end_date)`** RPC — the reporting aggregate
+  used by the Statistics page.
+- Row Level Security — every table requires an authenticated Supabase session;
+  `profiles` additionally restricts rows to their owner.
 
 ## Conflict Detection
 
@@ -146,34 +134,22 @@ The system automatically prevents:
 
 ## Development
 
-### Running Tests
-```bash
-cd backend
-php artisan test
-```
-
 ### Code Style
 ```bash
-cd backend
-./vendor/bin/pint
-
 cd frontend
 npm run lint
 ```
 
 ## Deployment
 
-### Backend (Shared Hosting)
-1. Upload backend files
-2. Configure environment variables
-3. Run migrations: `php artisan migrate --force`
-4. Set file permissions
+### Database
+Supabase is already hosted — just push migrations (`supabase db push`) as the
+schema evolves.
 
 ### Frontend (Vercel)
 1. Connect GitHub repository
-2. Configure build settings
-3. Set environment variables
-4. Deploy automatically on push
+2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` as environment variables
+3. Deploy automatically on push
 
 ## Roadmap
 
